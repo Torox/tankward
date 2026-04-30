@@ -13,8 +13,48 @@ export class Renderer {
     this.width = 0;
     this.height = 0;
     this.dpr = 1;
+    /** Screen-Shake-Zustand (gesetzt von Game._detonate). */
+    this.shakeMagnitude = 0;
+    this.shakeTime = 0;
+    this.shakeMaxTime = 0;
     this.resize();
     window.addEventListener('resize', () => this.resize());
+  }
+
+  /**
+   * Loest einen Screen-Shake aus (z.B. bei Atombombe).
+   * @param {number} magnitude Pixel
+   * @param {number} duration Sekunden
+   */
+  triggerShake(magnitude, duration) {
+    if (magnitude > this.shakeMagnitude) this.shakeMagnitude = magnitude;
+    if (duration > this.shakeTime) {
+      this.shakeTime = duration;
+      this.shakeMaxTime = duration;
+    }
+  }
+
+  /**
+   * Pro Frame aufrufen, BEVOR irgendetwas gezeichnet wird. Setzt die Transform-
+   * Matrix neu — bei aktivem Shake mit zufaelligem Offset, der mit der Restzeit
+   * abklingt.
+   * @param {number} dt
+   */
+  beginFrame(dt) {
+    if (this.shakeTime > 0) {
+      this.shakeTime -= dt;
+      const t = Math.max(0, this.shakeTime / this.shakeMaxTime);
+      const m = this.shakeMagnitude * t;
+      const dx = (Math.random() - 0.5) * 2 * m;
+      const dy = (Math.random() - 0.5) * 2 * m;
+      this.ctx.setTransform(this.dpr, 0, 0, this.dpr, dx * this.dpr, dy * this.dpr);
+      if (this.shakeTime <= 0) {
+        this.shakeMagnitude = 0;
+        this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      }
+    } else {
+      this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    }
   }
 
   resize() {

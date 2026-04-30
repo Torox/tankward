@@ -8,6 +8,7 @@ import { generateWind, muzzleVelocity } from '../physics/ballistics.js';
 import { checkProjectileImpact, applyBlast, settleTanks } from '../physics/collision.js';
 import { AiController, DIFFICULTY } from '../ai/ai.js';
 import { SoundManager } from '../audio/sound.js';
+import { ParticleSystem } from '../rendering/particles.js';
 import { loadSettings, saveSettings } from './settings.js';
 import { startLoop } from './loop.js';
 import { createRng } from './rng.js';
@@ -116,6 +117,7 @@ export class Game {
     this.subProjectiles = [];
     /** @type {FireBlob[]} aktive Brandeffekte (Napalm) */
     this.effects = [];
+    this.particles = new ParticleSystem();
 
     this.wind = 0;
     this.skyIndex = 0;
@@ -252,7 +254,9 @@ export class Game {
   start() {
     startLoop((dt, now) => {
       this.update(dt, now);
-      this.render(now);
+      // Partikel laufen unabhaengig vom Game-State (auch waehrend Banner/Pause-Resume).
+      if (!this.paused) this.particles.update(dt);
+      this.render(dt, now);
       this._frames++;
       if (now - this._fpsT >= 500) {
         const fps = Math.round((this._frames * 1000) / (now - this._fpsT));
@@ -570,12 +574,21 @@ export class Game {
     if (shooter && shooter.ai) shooter.ai.recordImpact(impact.x, impact.y);
 
     this.sound.playExplosion(w.blastRadius);
+    this.particles.explosion(impact.x, impact.y, w.blastRadius);
+
+    // Screen-Shake skaliert mit Blast-Radius (Mindeststaerke fuer alle).
+    const shakeMag = w.shake?.magnitude ?? Math.min(8, w.blastRadius * 0.12);
+    const shakeDur = w.shake?.duration ?? 0.18;
+    this.renderer.triggerShake(shakeMag, shakeDur);
+
+    // Tote Tanks bekommen eine eigene Rauch-/Funkenwolke.
+    for (const h of hits) {
+      if (!h.tank.alive) {
+        this.particles.tankDeath(h.tank.x, h.tank.y - 12);
+      }
+    }
 
     if (w.napalm) this._spawnNapalm(impact, w.napalm);
-    if (w.shake) {
-      // Screen-Shake-Hook fuer Schritt 10.
-      this._pendingShake = w.shake;
-    }
   }
 
   _stepRolling(p, dt, bounds) {
@@ -902,7 +915,10 @@ export class Game {
 
   // -- Render ----------------------------------------------------------------
 
-  render(now) {
+  render(dt, now) {
+    // Shake-Offset anwenden (oder Identity, wenn kein Shake aktiv).
+    this.renderer.beginFrame(dt || 0);
+
     this.renderer.drawSky(this.skyIndex);
     if (this.terrain) this.renderer.drawTerrain(this.terrain);
 
@@ -914,6 +930,7 @@ export class Game {
       if (this.projectile) this.renderer.drawProjectile(this.projectile);
       for (const sp of this.subProjectiles) this.renderer.drawProjectile(sp);
       for (const e of this.effects) this.renderer.drawFireBlob(e, now);
+      this.particles.draw(this.renderer.ctx);
       this.renderer.drawWindIndicator(this.wind);
     }
 

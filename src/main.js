@@ -1,5 +1,6 @@
 import './style.css';
 import { Game } from './core/game.js';
+import { initTouchControls } from './ui/touch.js';
 
 /**
  * Bootstrap. Baut die DOM-Overlays (Menue, HUD, Banner, Shop, Game-Over),
@@ -125,6 +126,25 @@ app.innerHTML = `
     </div>
   </div>
 
+  <div id="touch-controls" class="hidden absolute inset-x-0 bottom-0 pointer-events-none z-10">
+    <div class="flex justify-between items-end p-4 gap-4">
+      <div id="touch-aim" class="relative w-32 h-32 rounded-full bg-tw-panel/60 border-2 border-white/20 pointer-events-auto"
+           style="touch-action:none">
+        <div id="touch-aim-knob" class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-tw-accent shadow-lg"></div>
+      </div>
+      <div class="flex flex-col gap-3 pointer-events-auto">
+        <button id="touch-weapon"
+          class="font-pixel text-[10px] bg-tw-panel/80 border border-white/20 text-white px-3 py-3 rounded">
+          Waffe ▸
+        </button>
+        <button id="touch-fire"
+          class="font-pixel text-base bg-tw-accent text-tw-bg px-6 py-4 rounded-full shadow-lg active:bg-yellow-300">
+          🔥 FEUER
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div id="screen-pause" class="screen hidden flex items-center justify-center bg-black/60">
     <div class="bg-tw-panel border border-white/20 rounded-lg p-6 max-w-sm w-[90%] text-center flex flex-col gap-3">
       <div class="font-pixel text-xl text-tw-accent">Pause</div>
@@ -153,4 +173,5 @@ app.innerHTML = `
 `;
 
 const game = new Game();
+initTouchControls(game);
 game.start();

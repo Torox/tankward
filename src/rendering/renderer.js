@@ -1,4 +1,5 @@
 import { CONFIG } from '../core/config.js';
+import { TANK_BODY_HEIGHT, TANK_BODY_WIDTH, TURRET_LENGTH } from '../entities/tank.js';
 
 /**
  * Renderer kapselt Canvas-Kontext, DPR-Resize und Hintergrund/Terrain-Zeichnung.
@@ -82,8 +83,119 @@ export class Renderer {
     ctx.stroke();
   }
 
+  /**
+   * Zeichnet einen Panzer (Body + Turm + Rohr + HP-Bar + Name).
+   * Wenn `isActive`, wird ein gelber Pfeil ueber dem Panzer geblinkt — Hinweis,
+   * wer am Zug ist.
+   *
+   * @param {import('../entities/tank.js').Tank} tank
+   * @param {boolean} isActive
+   * @param {number} now performance.now() — fuer das Blinken
+   */
+  drawTank(tank, isActive, now) {
+    if (!tank.alive) return;
+    const ctx = this.ctx;
+    const cx = tank.x;
+    const groundY = tank.y;
+
+    const bodyW = TANK_BODY_WIDTH;
+    const bodyH = TANK_BODY_HEIGHT;
+    const trackH = 4;
+
+    // Ketten (dunkler, etwas breiter)
+    ctx.fillStyle = '#1f2937';
+    ctx.fillRect(cx - bodyW / 2 - 2, groundY - trackH, bodyW + 4, trackH);
+
+    // Body
+    ctx.fillStyle = tank.color;
+    roundRect(ctx, cx - bodyW / 2, groundY - trackH - bodyH, bodyW, bodyH, 3);
+    ctx.fill();
+
+    // Body-Outline
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+    ctx.stroke();
+
+    // Turm-Halbkreis
+    const turretCenterY = groundY - trackH - bodyH;
+    ctx.beginPath();
+    ctx.fillStyle = darken(tank.color, 0.2);
+    ctx.arc(cx, turretCenterY, 8, Math.PI, 2 * Math.PI);
+    ctx.fill();
+
+    // Rohr
+    const rad = (tank.turretAngle * Math.PI) / 180;
+    const tipX = cx + Math.cos(rad) * TURRET_LENGTH;
+    const tipY = turretCenterY - Math.sin(rad) * TURRET_LENGTH;
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#0f172a';
+    ctx.beginPath();
+    ctx.moveTo(cx, turretCenterY);
+    ctx.lineTo(tipX, tipY);
+    ctx.stroke();
+
+    // HP-Bar oberhalb des Panzers
+    const hpW = bodyW + 4;
+    const hpH = 3;
+    const hpX = cx - hpW / 2;
+    const hpY = groundY - trackH - bodyH - 18;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(hpX - 1, hpY - 1, hpW + 2, hpH + 2);
+    ctx.fillStyle = hpColor(tank.hp / tank.maxHp);
+    ctx.fillRect(hpX, hpY, hpW * (tank.hp / tank.maxHp), hpH);
+
+    // Name
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(tank.name, cx, hpY - 4);
+
+    // Active-Marker (blinkender Pfeil)
+    if (isActive) {
+      const blink = (Math.sin(now / 200) + 1) / 2;
+      ctx.fillStyle = `rgba(251, 191, 36, ${0.5 + blink * 0.5})`;
+      const arrowY = hpY - 18;
+      ctx.beginPath();
+      ctx.moveTo(cx, arrowY + 8);
+      ctx.lineTo(cx - 6, arrowY);
+      ctx.lineTo(cx + 6, arrowY);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
   /** Vollbild loeschen — wird vor jedem Frame aufgerufen. */
   clear() {
     this.ctx.clearRect(0, 0, this.width, this.height);
   }
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function hpColor(ratio) {
+  if (ratio > 0.6) return '#22c55e';
+  if (ratio > 0.3) return '#eab308';
+  return '#ef4444';
+}
+
+function darken(hex, amount) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!m) return hex;
+  const r = Math.max(0, Math.round(parseInt(m[1], 16) * (1 - amount)));
+  const g = Math.max(0, Math.round(parseInt(m[2], 16) * (1 - amount)));
+  const b = Math.max(0, Math.round(parseInt(m[3], 16) * (1 - amount)));
+  return `rgb(${r}, ${g}, ${b})`;
 }

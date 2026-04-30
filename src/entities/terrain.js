@@ -74,4 +74,35 @@ export class Terrain {
     if (x < 0 || x >= this.width || y < 0 || y >= this.height) return false;
     return y >= this.surfaceY(x);
   }
+
+  /**
+   * Schneidet einen kreisfoermigen Krater an (cx, cy) mit Radius r aus dem Terrain.
+   * Fuer jede Spalte x in [cx-r .. cx+r] liegt der Krater vertikal in [cy-chord, cy+chord].
+   *
+   * - War die alte Oberflaeche INNERHALB der Krater-Spalte: neue Oberflaeche = cy+chord
+   *   (Material darueber wurde weggesprengt -> Surface faellt nach unten).
+   * - War die Oberflaeche OBERHALB des Kraters (= surface y < cy-chord, also in der Luft):
+   *   keine Aenderung — Krater haengt unter Tank-Plateau.
+   * - War die Oberflaeche UNTERHALB des Kraters: keine Aenderung — die Heightmap kann
+   *   keine Tunnel darstellen, also lassen wir die Oberflaeche.
+   *
+   * @param {number} cx
+   * @param {number} cy
+   * @param {number} r
+   */
+  carve(cx, cy, r) {
+    const xMin = Math.max(0, Math.floor(cx - r));
+    const xMax = Math.min(this.width - 1, Math.ceil(cx + r));
+    const r2 = r * r;
+    for (let x = xMin; x <= xMax; x++) {
+      const dx = x - cx;
+      const chord = Math.sqrt(Math.max(0, r2 - dx * dx));
+      const top = cy - chord;
+      const bot = cy + chord;
+      const surf = this.heights[x];
+      if (surf >= top && surf <= bot) {
+        this.heights[x] = Math.min(this.height - 1, bot);
+      }
+    }
+  }
 }

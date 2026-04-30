@@ -4,6 +4,7 @@ import { Terrain } from './entities/terrain.js';
 import { Tank, TANK_COLORS, pickSpawnPositions } from './entities/tank.js';
 import { Projectile } from './entities/projectile.js';
 import { generateWind, muzzleVelocity } from './physics/ballistics.js';
+import { checkProjectileImpact, applyBlast, settleTanks } from './physics/collision.js';
 import { startLoop } from './core/loop.js';
 import { createRng } from './core/rng.js';
 import { Input } from './core/input.js';
@@ -46,7 +47,7 @@ app.innerHTML = `
       <div class="text-white mb-1">Steuerung</div>
       <div>← → Winkel · ↑ ↓ Stärke · Shift = fein</div>
       <div>Leertaste = Feuer · N = nächster Panzer</div>
-      <div id="boot-status" class="text-emerald-400 mt-2">Schritt 4/11 — Ballistik + Wind online.</div>
+      <div id="boot-status" class="text-emerald-400 mt-2">Schritt 5/11 — Kollision + Terrain-Zerstörung online.</div>
     </div>
   </div>
 `;
@@ -162,14 +163,25 @@ startLoop((dt, now) => {
 
   // Projektil-Update.
   if (projectile) {
+    const prevX = projectile.x;
+    const prevY = projectile.y;
     projectile.update(dt, wind, { width: renderer.width, height: renderer.height });
-    // Vorlaeufiger Treffer-Stub: bei Boden-Y -> tot. Echte Kollision in Schritt 5.
-    if (projectile.y >= terrain.surfaceY(projectile.x)) {
-      projectile.alive = false;
+
+    if (projectile.alive) {
+      const impact = checkProjectileImpact(projectile, prevX, prevY, terrain, tanks);
+      if (impact) {
+        // Standard-Granate: Sprengradius 35, Basisschaden 25.
+        const radius = 35;
+        const damage = 25;
+        terrain.carve(impact.x, impact.y, radius);
+        applyBlast(impact, tanks, radius, damage);
+        settleTanks(tanks, terrain);
+        projectile.alive = false;
+      }
     }
+
     if (!projectile.alive) {
       projectile = null;
-      // Naechster Spieler ist provisorisch dran.
       nextActiveTank();
     }
   }
@@ -195,7 +207,7 @@ startLoop((dt, now) => {
   frameCount++;
   if (now - fpsT0 >= 500) {
     const fps = Math.round((frameCount * 1000) / (now - fpsT0));
-    status.textContent = `Schritt 4/11 · ${fps} fps · seed ${seed} · Wind ${wind}`;
+    status.textContent = `Schritt 5/11 · ${fps} fps · seed ${seed} · Wind ${wind}`;
     frameCount = 0;
     fpsT0 = now;
   }

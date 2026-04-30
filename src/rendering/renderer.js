@@ -165,6 +165,81 @@ export class Renderer {
     }
   }
 
+  /**
+   * Zeichnet ein Projektil + Trail (verblassend).
+   * @param {import('../entities/projectile.js').Projectile} p
+   */
+  drawProjectile(p) {
+    if (!p.alive) return;
+    const ctx = this.ctx;
+
+    // Trail
+    if (p.trail.length > 1) {
+      ctx.lineCap = 'round';
+      ctx.lineWidth = 2;
+      for (let i = 1; i < p.trail.length; i++) {
+        const a = p.trail[i - 1];
+        const b = p.trail[i];
+        const alpha = i / p.trail.length;
+        ctx.strokeStyle = `rgba(251, 191, 36, ${alpha * 0.6})`;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      }
+    }
+
+    // Kopf
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /**
+   * Wind-Indikator oben mittig: Pfeil + Zahlenwert.
+   * @param {number} wind -10..+10
+   */
+  drawWindIndicator(wind) {
+    const ctx = this.ctx;
+    const cx = this.width / 2;
+    const cy = 56;
+    const maxArrow = 60;
+    const arrowLen = (Math.abs(wind) / 10) * maxArrow;
+    const dir = Math.sign(wind);
+
+    // Hintergrund-Pille
+    ctx.fillStyle = 'rgba(17, 26, 44, 0.7)';
+    roundRect(ctx, cx - 90, cy - 14, 180, 28, 14);
+    ctx.fill();
+
+    // Pfeil
+    if (arrowLen > 1) {
+      ctx.strokeStyle = wind === 0 ? '#94a3b8' : (dir > 0 ? '#22c55e' : '#ef4444');
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx - dir * arrowLen, cy);
+      ctx.lineTo(cx + dir * arrowLen, cy);
+      ctx.stroke();
+      // Spitze
+      ctx.beginPath();
+      ctx.moveTo(cx + dir * arrowLen, cy);
+      ctx.lineTo(cx + dir * (arrowLen - 6), cy - 4);
+      ctx.lineTo(cx + dir * (arrowLen - 6), cy + 4);
+      ctx.closePath();
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.fill();
+    }
+
+    ctx.fillStyle = '#fde68a';
+    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`Wind ${wind > 0 ? '+' : ''}${wind.toFixed(1)}`, cx, cy);
+    ctx.textBaseline = 'alphabetic';
+  }
+
   /** Vollbild loeschen — wird vor jedem Frame aufgerufen. */
   clear() {
     this.ctx.clearRect(0, 0, this.width, this.height);

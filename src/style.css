@@ -30,3 +30,25 @@ body,
   font-family: 'Press Start 2P', monospace;
   letter-spacing: 0.05em;
 }
+
+.screen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.screen > * {
+  pointer-events: auto;
+}
+
+/* HUD ist Overlay-Container, dessen Kinder aber selbst absolute positioniert sind */
+#screen-hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+#screen-hud .pointer-events-auto,
+#screen-hud button {
+  pointer-events: auto;
+}

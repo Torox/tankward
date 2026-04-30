@@ -10,20 +10,69 @@ const app = document.getElementById('app');
 app.innerHTML = `
   <canvas id="game-canvas"></canvas>
 
-  <div id="screen-menu" class="screen flex flex-col items-center justify-center gap-6 text-center px-6">
+  <div id="screen-menu" class="screen flex flex-col items-center justify-center gap-5 text-center px-6 overflow-auto py-6">
     <h1 class="font-pixel text-3xl md:text-5xl text-tw-accent drop-shadow-lg">TANK WARS</h1>
     <p class="font-pixel text-[10px] md:text-xs text-white/70 max-w-md leading-relaxed">
       Hot-Seat-Artillery im Browser. Hommage an den DOS-Klassiker.
     </p>
+
+    <div class="grid grid-cols-2 gap-3 w-full max-w-sm font-pixel text-[10px] text-left">
+      <label class="flex flex-col gap-1">
+        <span class="text-white/70">Spieler</span>
+        <select id="setup-num-players" class="bg-tw-panel border border-white/20 rounded px-2 py-2 text-white">
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4" selected>4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="8">8</option>
+          <option value="10">10</option>
+        </select>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="text-white/70">davon Mensch</span>
+        <select id="setup-num-humans" class="bg-tw-panel border border-white/20 rounded px-2 py-2 text-white"></select>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="text-white/70">KI-Stufe</span>
+        <select id="setup-difficulty" class="bg-tw-panel border border-white/20 rounded px-2 py-2 text-white">
+          <option value="beginner">Anfänger</option>
+          <option value="pro" selected>Profi</option>
+          <option value="expert">Pro</option>
+        </select>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="text-white/70">Runden</span>
+        <select id="setup-best-of" class="bg-tw-panel border border-white/20 rounded px-2 py-2 text-white">
+          <option value="1">Best of 1</option>
+          <option value="3" selected>Best of 3</option>
+          <option value="5">Best of 5</option>
+          <option value="7">Best of 7</option>
+        </select>
+      </label>
+    </div>
+
     <button id="btn-start"
       class="font-pixel text-sm bg-tw-accent text-tw-bg px-6 py-3 rounded shadow hover:bg-yellow-300 transition">
       Neues Spiel
     </button>
+
+    <div class="flex gap-2">
+      <button id="btn-sound"
+        class="font-pixel text-[10px] bg-tw-panel/80 hover:bg-tw-panel text-white px-3 py-2 rounded border border-white/10">
+        Sound ◉
+      </button>
+      <button id="btn-music"
+        class="font-pixel text-[10px] bg-tw-panel/80 hover:bg-tw-panel text-white px-3 py-2 rounded border border-white/10">
+        Musik ○
+      </button>
+    </div>
+
     <div class="font-pixel text-[10px] text-white/40 max-w-sm leading-relaxed">
       ← → Winkel · ↑ ↓ Stärke · Shift = fein<br>
-      Leertaste = Feuer · Tab/E = Waffe · Q = Waffe zurück
+      Leertaste = Feuer · Tab/E = Waffe · Q = Waffe zurück · ESC = Pause
     </div>
-    <div class="font-pixel text-[9px] text-white/30">v0.7 — Schritt 7/11</div>
+    <div class="font-pixel text-[9px] text-white/30">v0.9 — Schritt 9/11</div>
   </div>
 
   <div id="screen-hud" class="hidden">
@@ -73,6 +122,21 @@ app.innerHTML = `
           Nächste Runde
         </button>
       </div>
+    </div>
+  </div>
+
+  <div id="screen-pause" class="screen hidden flex items-center justify-center bg-black/60">
+    <div class="bg-tw-panel border border-white/20 rounded-lg p-6 max-w-sm w-[90%] text-center flex flex-col gap-3">
+      <div class="font-pixel text-xl text-tw-accent">Pause</div>
+      <button id="btn-resume"
+        class="font-pixel text-sm bg-tw-accent text-tw-bg px-6 py-3 rounded hover:bg-yellow-300 transition">
+        Weiter
+      </button>
+      <button id="btn-pause-menu"
+        class="font-pixel text-[10px] bg-tw-panel/60 hover:bg-tw-panel text-white px-4 py-2 rounded border border-white/20">
+        Hauptmenü (Spielstand verwerfen)
+      </button>
+      <div class="font-pixel text-[9px] text-white/40 mt-2">ESC schließt die Pause</div>
     </div>
   </div>
 

@@ -7,6 +7,8 @@ import { WEAPONS, WEAPON_ORDER, canFire, consume as consumeWeapon } from '../ent
 import { generateWind, muzzleVelocity } from '../physics/ballistics.js';
 import { checkProjectileImpact, applyBlast, settleTanks } from '../physics/collision.js';
 import { AiController, DIFFICULTY } from '../ai/ai.js';
+import { SoundManager } from '../audio/sound.js';
+import { loadSettings, saveSettings } from './settings.js';
 import { startLoop } from './loop.js';
 import { createRng } from './rng.js';
 import { Input } from './input.js';
@@ -69,12 +71,40 @@ export class Game {
       btnStart: document.getElementById('btn-start'),
       btnPause: document.getElementById('btn-pause'),
       btnShopContinue: document.getElementById('btn-shop-continue'),
-      btnBackMenu: document.getElementById('btn-back-menu')
+      btnBackMenu: document.getElementById('btn-back-menu'),
+      // Setup-Form
+      setupNumPlayers: document.getElementById('setup-num-players'),
+      setupNumHumans: document.getElementById('setup-num-humans'),
+      setupDifficulty: document.getElementById('setup-difficulty'),
+      setupBestOf: document.getElementById('setup-best-of'),
+      // Pause
+      pause: document.getElementById('screen-pause'),
+      btnResume: document.getElementById('btn-resume'),
+      btnPauseMenu: document.getElementById('btn-pause-menu'),
+      // Sound-Toggles
+      btnSound: document.getElementById('btn-sound'),
+      btnMusic: document.getElementById('btn-music')
     };
 
-    this.config = { ...DEFAULT_CONFIG };
+    // Settings + Sound
+    this.settings = loadSettings();
+    this.sound = new SoundManager();
+    this.sound.muted = !this.settings.sound;
+
+    // Pre-Pause-State, damit Resume in den richtigen Zustand zurueckkehrt.
+    this._pausedFrom = null;
+
+    this.config = {
+      ...DEFAULT_CONFIG,
+      numPlayers: this.settings.numPlayers,
+      numHumans: this.settings.numHumans,
+      aiDifficulty: this.settings.aiDifficulty,
+      bestOf: this.settings.bestOf
+    };
     this.state = null;
     this.stateTime = 0;
+    /** Set, wenn der eigentliche Match-Zustand pausiert ist. */
+    this.paused = false;
 
     /** @type {Tank[]} */
     this.tanks = [];
@@ -106,14 +136,117 @@ export class Game {
   }
 
   _wireDom() {
-    this.el.btnStart?.addEventListener('click', () => this._startNewGame());
-    this.el.btnPause?.addEventListener('click', () => this.setState(S.MENU));
+    this.el.btnStart?.addEventListener('click', () => {
+      this.sound.init();
+      this.sound.resume();
+      this._readSetupForm();
+      if (this.settings.music) this.sound.setMusic(true);
+      this.sound.playClick();
+      this._startNewGame();
+    });
+    this.el.btnPause?.addEventListener('click', () => this._openPause());
     this.el.btnShopContinue?.addEventListener('click', () => {
+      this.sound.playClick();
       this.roundIndex++;
       if (this._isMatchOver()) this.setState(S.GAME_OVER);
       else this.setState(S.ROUND_START);
     });
-    this.el.btnBackMenu?.addEventListener('click', () => this.setState(S.MENU));
+    this.el.btnBackMenu?.addEventListener('click', () => {
+      this.sound.playClick();
+      this.setState(S.MENU);
+    });
+    this.el.btnResume?.addEventListener('click', () => this._closePause());
+    this.el.btnPauseMenu?.addEventListener('click', () => {
+      this.sound.playClick();
+      this._closePause();
+      this.setState(S.MENU);
+    });
+    this.el.btnSound?.addEventListener('click', () => this._toggleSound());
+    this.el.btnMusic?.addEventListener('click', () => this._toggleMusic());
+
+    // Setup-Form initial mit Settings vorbelegen.
+    if (this.el.setupNumPlayers) this.el.setupNumPlayers.value = String(this.config.numPlayers);
+    if (this.el.setupNumHumans) this.el.setupNumHumans.value = String(this.config.numHumans);
+    if (this.el.setupDifficulty) this.el.setupDifficulty.value = this.config.aiDifficulty;
+    if (this.el.setupBestOf) this.el.setupBestOf.value = String(this.config.bestOf);
+    this._refreshNumHumansOptions();
+    this.el.setupNumPlayers?.addEventListener('change', () => this._refreshNumHumansOptions());
+
+    this._updateSoundButtons();
+
+    // Globale Tastenkuerzel: ESC = Pause toggle.
+    window.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      if (this.state === S.PLAYER_TURN || this.state === S.PROJECTILE_FLYING) {
+        this._openPause();
+      } else if (this.paused) {
+        this._closePause();
+      }
+    });
+  }
+
+  _readSetupForm() {
+    const np = parseInt(this.el.setupNumPlayers?.value ?? '4', 10);
+    const nh = parseInt(this.el.setupNumHumans?.value ?? '1', 10);
+    const diff = this.el.setupDifficulty?.value ?? DIFFICULTY.pro;
+    const bo = parseInt(this.el.setupBestOf?.value ?? '3', 10);
+    this.config.numPlayers = clamp(np, 2, 10);
+    this.config.numHumans = clamp(nh, 0, this.config.numPlayers);
+    this.config.aiDifficulty = diff;
+    this.config.bestOf = clamp(bo, 1, 9);
+    this.settings = saveSettings({
+      numPlayers: this.config.numPlayers,
+      numHumans: this.config.numHumans,
+      aiDifficulty: this.config.aiDifficulty,
+      bestOf: this.config.bestOf
+    });
+  }
+
+  _refreshNumHumansOptions() {
+    if (!this.el.setupNumHumans || !this.el.setupNumPlayers) return;
+    const np = parseInt(this.el.setupNumPlayers.value, 10);
+    const current = parseInt(this.el.setupNumHumans.value, 10);
+    const opts = [];
+    for (let i = 0; i <= np; i++) opts.push(`<option value="${i}">${i}</option>`);
+    this.el.setupNumHumans.innerHTML = opts.join('');
+    this.el.setupNumHumans.value = String(Math.min(current, np));
+  }
+
+  _openPause() {
+    if (this.paused) return;
+    this.paused = true;
+    this._pausedFrom = this.state;
+    if (this.el.pause) this.el.pause.classList.remove('hidden');
+  }
+
+  _closePause() {
+    if (!this.paused) return;
+    this.paused = false;
+    if (this.el.pause) this.el.pause.classList.add('hidden');
+  }
+
+  _toggleSound() {
+    this.settings = saveSettings({ sound: !this.settings.sound });
+    this.sound.setMuted(!this.settings.sound);
+    if (!this.settings.sound) this.sound.setMusic(false);
+    else if (this.settings.music) this.sound.setMusic(true);
+    this._updateSoundButtons();
+  }
+
+  _toggleMusic() {
+    this.settings = saveSettings({ music: !this.settings.music });
+    if (this.settings.music && this.settings.sound) this.sound.setMusic(true);
+    else this.sound.setMusic(false);
+    this._updateSoundButtons();
+  }
+
+  _updateSoundButtons() {
+    if (this.el.btnSound) {
+      this.el.btnSound.textContent = `Sound ${this.settings.sound ? '◉' : '○'}`;
+    }
+    if (this.el.btnMusic) {
+      this.el.btnMusic.textContent = `Musik ${this.settings.music ? '◉' : '○'}`;
+    }
   }
 
   start() {
@@ -191,6 +324,7 @@ export class Game {
           if (idx >= 0) this.scores[idx] = (this.scores[idx] ?? 0) + 1;
           winner.credits += ROUND_SURVIVOR_BONUS;
           this._showBanner(`${winner.name} gewinnt die Runde!`, `+${ROUND_SURVIVOR_BONUS} Credits · ${this._scoresLine()}`, winner.color);
+          this.sound.playRoundEnd();
         } else {
           this._showBanner('Patt — alle ausgeschaltet', this._scoresLine(), '#94a3b8');
         }
@@ -220,6 +354,7 @@ export class Game {
   }
 
   update(dt) {
+    if (this.paused) return;
     this.stateTime += dt;
 
     // Effekte (Napalm) laufen waehrend PROJECTILE_FLYING und IMPACT.
@@ -330,6 +465,7 @@ export class Game {
       color: w.color || '#fbbf24',
       radius: wid === 'nuke' ? 5 : wid === 'roller' || wid === 'driller' ? 4 : 3
     });
+    this.sound.playShoot(wid);
     this.setState(S.PROJECTILE_FLYING);
   }
 
@@ -433,9 +569,11 @@ export class Game {
     const shooter = this.tanks.find((t) => t.id === p.ownerId);
     if (shooter && shooter.ai) shooter.ai.recordImpact(impact.x, impact.y);
 
+    this.sound.playExplosion(w.blastRadius);
+
     if (w.napalm) this._spawnNapalm(impact, w.napalm);
     if (w.shake) {
-      // Hook fuer Schritt 10 (Screen-Shake). Hier nur als Datenpunkt vermerken.
+      // Screen-Shake-Hook fuer Schritt 10.
       this._pendingShake = w.shake;
     }
   }
@@ -810,4 +948,8 @@ export class Game {
       }
     }
   }
+}
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v));
 }

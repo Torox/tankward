@@ -53,6 +53,15 @@ body,
   pointer-events: auto;
 }
 
+/* Default: Desktop-HUD sichtbar, Mobile-HUD aus. */
+.hud-mobile-only {
+  display: none;
+}
+
+.hud-desktop-only {
+  display: flex;
+}
+
 /* Touch-Modus: Overlay ein, Tastatur-Hinweise aus. */
 body.has-touch #touch-controls {
   display: block !important;
@@ -61,26 +70,72 @@ body.has-touch .desktop-only {
   display: none !important;
 }
 
-/* Schmaler Viewport (Phone/Portrait): HUD kompakter, Tastatur-Hinweise weg */
+/* Mobile-HUD-Switch: an wenn entweder schmaler Viewport ODER Touch-Modus. */
+body.has-touch .hud-mobile-only {
+  display: block !important;
+}
+body.has-touch .hud-desktop-only {
+  display: none !important;
+}
+
 @media (max-width: 720px) {
+  .hud-mobile-only {
+    display: block !important;
+  }
+  .hud-desktop-only {
+    display: none !important;
+  }
   .hide-on-mobile {
     display: none !important;
   }
-  #screen-hud .bottom-3 {
-    bottom: 96px; /* Platz fuer Touch-Buttons unten */
-  }
   #screen-shop .max-w-5xl {
     max-width: 100%;
+  }
+  #screen-banner > div {
+    padding: 16px 18px;
   }
 }
 
 /* Touch-Buttons brauchen mindestens 48px Tap-Target */
 #touch-fire,
 #touch-weapon,
-#btn-pause {
+#btn-pause,
+#btn-banner-continue {
   min-height: 48px;
 }
 
 #touch-fire {
   min-width: 96px;
+}
+
+/* Player-Strip auf Mobile: kleine Pillen mit Farbe + HP-Mini-Bar */
+.player-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.35);
+}
+.player-pill .swatch {
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+}
+.player-pill .hpbar {
+  position: relative;
+  width: 28px;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 1px;
+  overflow: hidden;
+}
+.player-pill .hpbar > span {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  transform-origin: left center;
+}
+.player-pill.dead {
+  opacity: 0.35;
 }

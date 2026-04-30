@@ -83,7 +83,23 @@ app.innerHTML = `
         Menü
       </button>
     </div>
-    <div class="absolute bottom-3 inset-x-3 flex flex-wrap gap-3 items-end justify-between font-pixel text-[10px] pointer-events-none">
+
+    <div id="hud-mobile" class="hud-mobile-only absolute top-3 left-3 right-20 pointer-events-none">
+      <div class="bg-tw-panel/85 border border-white/10 rounded p-2 font-pixel text-[9px] flex flex-col gap-1">
+        <div class="flex items-center justify-between gap-2">
+          <span id="hud-active-mobile" class="text-tw-accent text-xs truncate">P1</span>
+          <span class="text-white/80">
+            <span id="hud-angle-mobile" class="text-emerald-400">90°</span>
+            <span class="text-white/30">·</span>
+            <span id="hud-power-mobile" class="text-emerald-400">50</span>
+          </span>
+          <span id="hud-weapon-mobile" class="text-tw-accent truncate max-w-[120px]">● Std ×∞</span>
+        </div>
+        <div id="hud-players-mobile" class="flex items-center gap-1 flex-wrap"></div>
+      </div>
+    </div>
+
+    <div id="hud-desktop" class="absolute bottom-3 inset-x-3 flex flex-wrap gap-3 items-end justify-between font-pixel text-[10px] pointer-events-none hud-desktop-only">
       <div class="bg-tw-panel/80 border border-white/10 rounded p-3 min-w-[220px]">
         <div class="text-white/70 mb-1">Aktiver Spieler</div>
         <div id="hud-active" class="text-tw-accent text-sm">P1</div>
@@ -93,22 +109,23 @@ app.innerHTML = `
         <div id="hud-weapon" class="text-tw-accent">● Standard ×∞</div>
       </div>
       <div id="hud-players" class="bg-tw-panel/80 border border-white/10 rounded p-3 max-w-md flex flex-col gap-1"></div>
-      <div class="bg-tw-panel/80 border border-white/10 rounded p-3 text-white/70 max-w-md hide-on-mobile desktop-only">
+      <div class="bg-tw-panel/80 border border-white/10 rounded p-3 text-white/70 max-w-md desktop-only">
         <div class="text-white mb-1">Steuerung</div>
         <div>← → Winkel · ↑ ↓ Stärke · Shift = fein</div>
         <div>Leertaste = Feuer · Tab/E = Waffe · Q = zurück</div>
         <div id="hud-status" class="text-emerald-400 mt-2">—</div>
       </div>
-      <div id="hud-status-mobile" class="bg-tw-panel/80 border border-white/10 rounded p-2 text-emerald-400 hidden">
-        <span id="hud-status-mirror">—</span>
-      </div>
     </div>
   </div>
 
-  <div id="screen-banner" class="screen hidden flex items-center justify-center">
-    <div class="bg-tw-panel/90 border border-white/20 rounded-lg px-8 py-6 text-center font-pixel shadow-2xl">
-      <div id="banner-title" class="text-2xl text-tw-accent">—</div>
-      <div id="banner-sub" class="text-[10px] text-white/70 mt-2">—</div>
+  <div id="screen-banner" class="screen hidden flex items-center justify-center px-4">
+    <div class="bg-tw-panel/95 border border-white/20 rounded-lg px-6 py-5 text-center font-pixel shadow-2xl max-w-md w-full">
+      <div id="banner-title" class="text-lg md:text-2xl text-tw-accent">—</div>
+      <div id="banner-sub" class="text-[10px] text-white/70 mt-2 leading-relaxed">—</div>
+      <button id="btn-banner-continue"
+        class="hidden mt-4 font-pixel text-sm bg-tw-accent text-tw-bg px-6 py-3 rounded shadow active:bg-yellow-300 transition w-full">
+        Weiter
+      </button>
     </div>
   </div>
 

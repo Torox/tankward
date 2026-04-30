@@ -63,6 +63,13 @@ export class Game {
       hudWeapon: document.getElementById('hud-weapon'),
       hudPlayers: document.getElementById('hud-players'),
       hudStatus: document.getElementById('hud-status'),
+      // Mobile-HUD-Mirror
+      hudActiveMobile: document.getElementById('hud-active-mobile'),
+      hudAngleMobile: document.getElementById('hud-angle-mobile'),
+      hudPowerMobile: document.getElementById('hud-power-mobile'),
+      hudWeaponMobile: document.getElementById('hud-weapon-mobile'),
+      hudPlayersMobile: document.getElementById('hud-players-mobile'),
+      btnBannerContinue: document.getElementById('btn-banner-continue'),
       bannerTitle: document.getElementById('banner-title'),
       bannerSub: document.getElementById('banner-sub'),
       gameoverContent: document.getElementById('gameover-content'),
@@ -165,6 +172,9 @@ export class Game {
     });
     this.el.btnSound?.addEventListener('click', () => this._toggleSound());
     this.el.btnMusic?.addEventListener('click', () => this._toggleMusic());
+
+    // Banner-Continue: einziger Weg, ROUND_END/GAME_OVER auf Mobile zu verlassen.
+    this.el.btnBannerContinue?.addEventListener('click', () => this._advanceFromBanner());
 
     // Setup-Form initial mit Settings vorbelegen.
     if (this.el.setupNumPlayers) this.el.setupNumPlayers.value = String(this.config.numPlayers);
@@ -312,6 +322,7 @@ export class Game {
         this._showOnly('hud');
         this._beginRound();
         this._showBanner(`Runde ${this.roundIndex + 1} / ${this.maxRounds}`, this._scoresLine());
+        this._setBannerButton(false);
         break;
       case S.PLAYER_TURN: {
         this._hideBanner();
@@ -332,6 +343,8 @@ export class Game {
         } else {
           this._showBanner('Patt — alle ausgeschaltet', this._scoresLine(), '#94a3b8');
         }
+        // Tappbarer Continue-Button (ESC/Space funktioniert weiter, aber Mobile braucht das hier).
+        this._setBannerButton(true, this._isMatchOver() ? 'Spielende' : 'Weiter');
         break;
       }
       case S.SHOP:
@@ -788,24 +801,39 @@ export class Game {
   // -- HUD -------------------------------------------------------------------
 
   _renderPlayersHud() {
-    if (!this.el.hudPlayers) return;
-    this.el.hudPlayers.innerHTML = this.tanks
-      .map((t, i) => {
-        const ratio = Math.max(0, t.hp / t.maxHp);
-        const wins = this.scores[i] ?? 0;
-        const dim = t.alive ? '' : 'opacity-40';
-        return `
-          <div class="flex items-center gap-2 ${dim}">
-            <span class="inline-block w-2 h-2 rounded-sm" style="background:${t.color}"></span>
-            <span class="text-white text-[10px] w-8">${t.name}</span>
-            <span class="relative inline-block w-20 h-2 bg-black/50 rounded-sm overflow-hidden">
-              <span class="absolute inset-y-0 left-0" style="width:${ratio * 100}%; background:${this._hpColor(ratio)}"></span>
-            </span>
-            <span class="text-tw-accent text-[10px]">x${wins}</span>
-            <span class="text-emerald-300 text-[10px]">${t.credits}¢</span>
-          </div>`;
-      })
-      .join('');
+    if (this.el.hudPlayers) {
+      this.el.hudPlayers.innerHTML = this.tanks
+        .map((t, i) => {
+          const ratio = Math.max(0, t.hp / t.maxHp);
+          const wins = this.scores[i] ?? 0;
+          const dim = t.alive ? '' : 'opacity-40';
+          return `
+            <div class="flex items-center gap-2 ${dim}">
+              <span class="inline-block w-2 h-2 rounded-sm" style="background:${t.color}"></span>
+              <span class="text-white text-[10px] w-8">${t.name}</span>
+              <span class="relative inline-block w-20 h-2 bg-black/50 rounded-sm overflow-hidden">
+                <span class="absolute inset-y-0 left-0" style="width:${ratio * 100}%; background:${this._hpColor(ratio)}"></span>
+              </span>
+              <span class="text-tw-accent text-[10px]">x${wins}</span>
+              <span class="text-emerald-300 text-[10px]">${t.credits}¢</span>
+            </div>`;
+        })
+        .join('');
+    }
+    if (this.el.hudPlayersMobile) {
+      this.el.hudPlayersMobile.innerHTML = this.tanks
+        .map((t, i) => {
+          const ratio = Math.max(0, t.hp / t.maxHp);
+          const wins = this.scores[i] ?? 0;
+          return `
+            <span class="player-pill ${t.alive ? '' : 'dead'}" data-pid="${i}">
+              <span class="swatch" style="background:${t.color}"></span>
+              <span class="hpbar"><span style="width:${ratio * 100}%; background:${this._hpColor(ratio)}"></span></span>
+              <span class="text-tw-accent text-[8px]">x${wins}</span>
+            </span>`;
+        })
+        .join('');
+    }
   }
 
   _hpColor(r) {
@@ -826,6 +854,27 @@ export class Game {
 
   _hideBanner() {
     if (this.el.banner) this.el.banner.classList.add('hidden');
+    this._setBannerButton(false);
+  }
+
+  _setBannerButton(visible, label = 'Weiter') {
+    if (!this.el.btnBannerContinue) return;
+    if (visible) {
+      this.el.btnBannerContinue.textContent = label;
+      this.el.btnBannerContinue.classList.remove('hidden');
+    } else {
+      this.el.btnBannerContinue.classList.add('hidden');
+    }
+  }
+
+  _advanceFromBanner() {
+    this.sound.playClick();
+    if (this.state === S.ROUND_END) {
+      if (this._isMatchOver()) this.setState(S.GAME_OVER);
+      else this.setState(S.SHOP);
+    } else if (this.state === S.GAME_OVER) {
+      this.setState(S.MENU);
+    }
   }
 
   _showOnly(name) {
@@ -937,20 +986,39 @@ export class Game {
     if (this.state === S.PLAYER_TURN || this.state === S.PROJECTILE_FLYING) {
       const active = this.tanks[this.activeIndex];
       if (active) {
+        const flying = this.state === S.PROJECTILE_FLYING;
+        const angleStr = `${Math.round(active.turretAngle)}°`;
+        const powerStr = `${Math.round(active.power)}`;
+        const w = WEAPONS[active.selectedWeapon] || WEAPONS.standard;
+        const stock = w.unlimited ? '∞' : active.inventory.get(w.id) ?? 0;
+        const wTextLong = `${w.icon} ${w.name} ×${stock}`;
+        const wTextShort = `${w.icon} ${shortName(w.name)} ×${stock}`;
+
         if (this.el.hudActive) {
-          this.el.hudActive.textContent = active.name + (this.state === S.PROJECTILE_FLYING ? ' (im Flug)' : '');
+          this.el.hudActive.textContent = active.name + (flying ? ' (im Flug)' : '');
           this.el.hudActive.style.color = active.color;
         }
-        if (this.el.hudAngle) this.el.hudAngle.textContent = `${Math.round(active.turretAngle)}°`;
-        if (this.el.hudPower) this.el.hudPower.textContent = `${Math.round(active.power)}`;
+        if (this.el.hudAngle) this.el.hudAngle.textContent = angleStr;
+        if (this.el.hudPower) this.el.hudPower.textContent = powerStr;
         if (this.el.hudWeapon) {
-          const w = WEAPONS[active.selectedWeapon] || WEAPONS.standard;
-          const stock = w.unlimited ? '∞' : active.inventory.get(w.id) ?? 0;
-          this.el.hudWeapon.textContent = `${w.icon} ${w.name} ×${stock}`;
+          this.el.hudWeapon.textContent = wTextLong;
           this.el.hudWeapon.style.color = w.color || '#fff';
         }
+
+        // Mobile-Mirror.
+        if (this.el.hudActiveMobile) {
+          this.el.hudActiveMobile.textContent = active.name + (flying ? ' ✈' : '');
+          this.el.hudActiveMobile.style.color = active.color;
+        }
+        if (this.el.hudAngleMobile) this.el.hudAngleMobile.textContent = angleStr;
+        if (this.el.hudPowerMobile) this.el.hudPowerMobile.textContent = powerStr;
+        if (this.el.hudWeaponMobile) {
+          this.el.hudWeaponMobile.textContent = wTextShort;
+          this.el.hudWeaponMobile.style.color = w.color || '#fff';
+        }
       }
-      // Live HP-Bars + credits.
+
+      // Live HP-Bars + credits — Desktop.
       if (this.el.hudPlayers) {
         const rows = this.el.hudPlayers.children;
         for (let i = 0; i < rows.length && i < this.tanks.length; i++) {
@@ -958,13 +1026,41 @@ export class Game {
           const bar = rows[i].querySelector('span > span');
           if (bar) bar.style.width = `${(t.hp / t.maxHp) * 100}%`;
           rows[i].classList.toggle('opacity-40', !t.alive);
-          // Credits-Span ist letztes Kind
           const credEl = rows[i].lastElementChild;
           if (credEl) credEl.textContent = `${t.credits}¢`;
         }
       }
+      // Live HP-Bars — Mobile (Pillen).
+      if (this.el.hudPlayersMobile) {
+        const pills = this.el.hudPlayersMobile.children;
+        for (let i = 0; i < pills.length && i < this.tanks.length; i++) {
+          const t = this.tanks[i];
+          const ratio = Math.max(0, t.hp / t.maxHp);
+          const bar = pills[i].querySelector('.hpbar > span');
+          if (bar) {
+            bar.style.width = `${ratio * 100}%`;
+            bar.style.background = this._hpColor(ratio);
+          }
+          pills[i].classList.toggle('dead', !t.alive);
+        }
+      }
     }
   }
+}
+
+const SHORT_NAMES = {
+  'Standard-Granate': 'Std',
+  'Schwere Granate': 'Schwer',
+  'Streubombe': 'Streu',
+  'Napalm': 'Napalm',
+  'Roller': 'Roller',
+  'Tunnelbohrer': 'Bohrer',
+  'MIRV': 'MIRV',
+  'Atombombe': 'Atom'
+};
+
+function shortName(name) {
+  return SHORT_NAMES[name] ?? name;
 }
 
 function clamp(v, lo, hi) {

@@ -93,11 +93,14 @@ app.innerHTML = `
         <div id="hud-weapon" class="text-tw-accent">● Standard ×∞</div>
       </div>
       <div id="hud-players" class="bg-tw-panel/80 border border-white/10 rounded p-3 max-w-md flex flex-col gap-1"></div>
-      <div class="bg-tw-panel/80 border border-white/10 rounded p-3 text-white/70 max-w-md">
+      <div class="bg-tw-panel/80 border border-white/10 rounded p-3 text-white/70 max-w-md hide-on-mobile desktop-only">
         <div class="text-white mb-1">Steuerung</div>
         <div>← → Winkel · ↑ ↓ Stärke · Shift = fein</div>
         <div>Leertaste = Feuer · Tab/E = Waffe · Q = zurück</div>
         <div id="hud-status" class="text-emerald-400 mt-2">—</div>
+      </div>
+      <div id="hud-status-mobile" class="bg-tw-panel/80 border border-white/10 rounded p-2 text-emerald-400 hidden">
+        <span id="hud-status-mirror">—</span>
       </div>
     </div>
   </div>
@@ -127,19 +130,19 @@ app.innerHTML = `
   </div>
 
   <div id="touch-controls" class="hidden absolute inset-x-0 bottom-0 pointer-events-none z-10">
-    <div class="flex justify-between items-end p-4 gap-4">
-      <div id="touch-aim" class="relative w-32 h-32 rounded-full bg-tw-panel/60 border-2 border-white/20 pointer-events-auto"
-           style="touch-action:none">
-        <div id="touch-aim-knob" class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-tw-accent shadow-lg"></div>
+    <div class="flex justify-between items-end p-3 gap-3">
+      <div class="font-pixel text-[9px] text-white/70 bg-tw-panel/80 border border-white/10 rounded p-2 pointer-events-none max-w-[55%] leading-relaxed">
+        Auf das Spielfeld tippen + ziehen = Zielen.<br>
+        Distanz vom Panzer = Stärke.
       </div>
-      <div class="flex flex-col gap-3 pointer-events-auto">
+      <div class="flex items-end gap-2 pointer-events-auto">
         <button id="touch-weapon"
-          class="font-pixel text-[10px] bg-tw-panel/80 border border-white/20 text-white px-3 py-3 rounded">
+          class="font-pixel text-[10px] bg-tw-panel/80 border border-white/20 text-white px-3 py-3 rounded shadow-lg active:bg-tw-panel">
           Waffe ▸
         </button>
         <button id="touch-fire"
-          class="font-pixel text-base bg-tw-accent text-tw-bg px-6 py-4 rounded-full shadow-lg active:bg-yellow-300">
-          🔥 FEUER
+          class="font-pixel text-sm bg-tw-accent text-tw-bg px-7 py-5 rounded-full shadow-lg active:bg-yellow-300 active:scale-95 transition">
+          FEUER
         </button>
       </div>
     </div>

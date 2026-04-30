@@ -52,3 +52,35 @@ body,
 #screen-hud button {
   pointer-events: auto;
 }
+
+/* Touch-Modus: Overlay ein, Tastatur-Hinweise aus. */
+body.has-touch #touch-controls {
+  display: block !important;
+}
+body.has-touch .desktop-only {
+  display: none !important;
+}
+
+/* Schmaler Viewport (Phone/Portrait): HUD kompakter, Tastatur-Hinweise weg */
+@media (max-width: 720px) {
+  .hide-on-mobile {
+    display: none !important;
+  }
+  #screen-hud .bottom-3 {
+    bottom: 96px; /* Platz fuer Touch-Buttons unten */
+  }
+  #screen-shop .max-w-5xl {
+    max-width: 100%;
+  }
+}
+
+/* Touch-Buttons brauchen mindestens 48px Tap-Target */
+#touch-fire,
+#touch-weapon,
+#btn-pause {
+  min-height: 48px;
+}
+
+#touch-fire {
+  min-width: 96px;
+}

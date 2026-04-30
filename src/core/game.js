@@ -6,6 +6,7 @@ import { FireBlob } from '../entities/fire-blob.js';
 import { WEAPONS, WEAPON_ORDER, canFire, consume as consumeWeapon } from '../entities/weapons.js';
 import { generateWind, muzzleVelocity } from '../physics/ballistics.js';
 import { checkProjectileImpact, applyBlast, settleTanks } from '../physics/collision.js';
+import { AiController, DIFFICULTY } from '../ai/ai.js';
 import { startLoop } from './loop.js';
 import { createRng } from './rng.js';
 import { Input } from './input.js';
@@ -29,7 +30,12 @@ export const S = Object.freeze({
   GAME_OVER: 'GAME_OVER'
 });
 
-const DEFAULT_CONFIG = { numPlayers: 4, bestOf: 3 };
+const DEFAULT_CONFIG = {
+  numPlayers: 4,
+  numHumans: 1,                    // erster Slot ist Mensch, Rest KI
+  aiDifficulty: DIFFICULTY.pro,    // 'beginner' | 'pro' | 'expert'
+  bestOf: 3
+};
 const PLAYER_NAMES = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10'];
 const KILL_BONUS = 200;
 const ROUND_SURVIVOR_BONUS = 250;
@@ -133,13 +139,19 @@ export class Game {
     // Persistente Tanks: bleiben ueber Runden hinweg (Inventory + Credits).
     this.tanks = [];
     for (let i = 0; i < this.config.numPlayers; i++) {
+      const isHuman = i < this.config.numHumans;
+      const baseName = PLAYER_NAMES[i];
       const t = new Tank({
-        id: PLAYER_NAMES[i],
-        name: PLAYER_NAMES[i],
+        id: baseName,
+        name: isHuman ? baseName : `${baseName} (KI)`,
         color: TANK_COLORS[i % TANK_COLORS.length],
-        x: 0
+        x: 0,
+        isHuman
       });
       t.selectedWeapon = 'standard';
+      if (!isHuman) {
+        t.ai = new AiController(t, this.config.aiDifficulty);
+      }
       this.tanks.push(t);
     }
 
@@ -164,10 +176,13 @@ export class Game {
         this._beginRound();
         this._showBanner(`Runde ${this.roundIndex + 1} / ${this.maxRounds}`, this._scoresLine());
         break;
-      case S.PLAYER_TURN:
+      case S.PLAYER_TURN: {
         this._hideBanner();
         this._showOnly('hud');
+        const t = this.tanks[this.activeIndex];
+        if (t && !t.isHuman && t.ai) t.ai.beginTurn(this);
         break;
+      }
       case S.ROUND_END: {
         const alive = this._aliveTanks();
         if (alive.length === 1) {
@@ -259,6 +274,18 @@ export class Game {
       this._nextActiveTank();
       return;
     }
+
+    if (!active.isHuman && active.ai) {
+      // KI denkt + zielt + feuert.
+      active.ai.update(dt, () => this._fire());
+      // Tasten waehrend KI-Zug ignorieren, aber pressed-Buffer leeren.
+      this.input.consume('Space');
+      this.input.consume('Tab');
+      this.input.consume('KeyQ');
+      this.input.consume('KeyE');
+      return;
+    }
+
     const fine = this.input.isDown('ShiftLeft') || this.input.isDown('ShiftRight');
     const angleSpeed = (fine ? 15 : 60) * dt;
     const powerSpeed = (fine ? 12 : 40) * dt;
@@ -401,6 +428,10 @@ export class Game {
     this.terrain.carve(impact.x, impact.y, w.blastRadius);
     const hits = applyBlast(impact, this.tanks, w.blastRadius, w.damage);
     this._awardCredits(p.ownerId, hits);
+
+    // Lernen fuer "expert"-KI: dem Schuetzen den Treffer zurueckmelden.
+    const shooter = this.tanks.find((t) => t.id === p.ownerId);
+    if (shooter && shooter.ai) shooter.ai.recordImpact(impact.x, impact.y);
 
     if (w.napalm) this._spawnNapalm(impact, w.napalm);
     if (w.shake) {

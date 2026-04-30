@@ -2,16 +2,21 @@ import { Renderer } from '../rendering/renderer.js';
 import { Terrain } from '../entities/terrain.js';
 import { Tank, TANK_COLORS, pickSpawnPositions } from '../entities/tank.js';
 import { Projectile } from '../entities/projectile.js';
+import { FireBlob } from '../entities/fire-blob.js';
+import { WEAPONS, WEAPON_ORDER, canFire, consume as consumeWeapon } from '../entities/weapons.js';
 import { generateWind, muzzleVelocity } from '../physics/ballistics.js';
-import { checkProjectileImpact, applyBlast, settleTanks } from './../physics/collision.js';
+import { checkProjectileImpact, applyBlast, settleTanks } from '../physics/collision.js';
 import { startLoop } from './loop.js';
 import { createRng } from './rng.js';
 import { Input } from './input.js';
 
 /**
- * Game-State-Machine. Reihenfolge gemaess Spec:
+ * Game-State-Machine.
  * MENU -> ROUND_START -> PLAYER_TURN -> PROJECTILE_FLYING -> IMPACT
  *      -> (alive>1) PLAYER_TURN | (alive<=1) ROUND_END -> SHOP -> ROUND_START | GAME_OVER -> MENU
+ *
+ * Inventory + Credits persistieren ueber Runden (innerhalb eines Matches);
+ * HP/Position werden je Runde resettet.
  */
 export const S = Object.freeze({
   MENU: 'MENU',
@@ -24,12 +29,11 @@ export const S = Object.freeze({
   GAME_OVER: 'GAME_OVER'
 });
 
-const DEFAULT_CONFIG = {
-  numPlayers: 4,
-  bestOf: 3 // ungerade -> kein Patt-Ende
-};
-
+const DEFAULT_CONFIG = { numPlayers: 4, bestOf: 3 };
 const PLAYER_NAMES = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10'];
+const KILL_BONUS = 200;
+const ROUND_SURVIVOR_BONUS = 250;
+const HIT_CREDITS_PER_HP = 1;
 
 export class Game {
   constructor() {
@@ -37,7 +41,7 @@ export class Game {
     this.renderer = new Renderer(this.canvas);
     this.input = new Input();
 
-    /** @type {Record<string, HTMLElement>} */
+    /** @type {Record<string, HTMLElement|null>} */
     this.el = {
       menu: document.getElementById('screen-menu'),
       hud: document.getElementById('screen-hud'),
@@ -47,11 +51,15 @@ export class Game {
       hudActive: document.getElementById('hud-active'),
       hudAngle: document.getElementById('hud-angle'),
       hudPower: document.getElementById('hud-power'),
+      hudWeapon: document.getElementById('hud-weapon'),
       hudPlayers: document.getElementById('hud-players'),
       hudStatus: document.getElementById('hud-status'),
       bannerTitle: document.getElementById('banner-title'),
       bannerSub: document.getElementById('banner-sub'),
       gameoverContent: document.getElementById('gameover-content'),
+      shopGrid: document.getElementById('shop-grid'),
+      shopHeader: document.getElementById('shop-header'),
+      shopPlayerTabs: document.getElementById('shop-player-tabs'),
       btnStart: document.getElementById('btn-start'),
       btnPause: document.getElementById('btn-pause'),
       btnShopContinue: document.getElementById('btn-shop-continue'),
@@ -59,7 +67,6 @@ export class Game {
     };
 
     this.config = { ...DEFAULT_CONFIG };
-
     this.state = null;
     this.stateTime = 0;
 
@@ -67,44 +74,40 @@ export class Game {
     this.tanks = [];
     /** @type {Terrain|null} */
     this.terrain = null;
-    /** @type {Projectile|null} */
+    /** @type {Projectile|null} Haupt-Projektil */
     this.projectile = null;
+    /** @type {Projectile[]} Submunition (Streubombe/MIRV-Kinder) */
+    this.subProjectiles = [];
+    /** @type {FireBlob[]} aktive Brandeffekte (Napalm) */
+    this.effects = [];
+
     this.wind = 0;
     this.skyIndex = 0;
     this.activeIndex = 0;
     /** @type {number[]} runden-gewonnen pro tank-index */
     this.scores = [];
     this.roundIndex = 0;
-    /** @type {number} target-rundenzahl, ab der Game-Over greift */
     this.maxRounds = this.config.bestOf;
+
+    /** Welcher Tank-Index ist im Shop gerade aktiv (zum Kaufen). */
+    this.shopActiveIdx = 0;
 
     this._wireDom();
     this.setState(S.MENU);
 
-    // FPS-Tracking
     this._frames = 0;
     this._fpsT = performance.now();
   }
 
   _wireDom() {
     this.el.btnStart?.addEventListener('click', () => this._startNewGame());
-    this.el.btnPause?.addEventListener('click', () => {
-      // Pause -> zurueck ins Hauptmenue (Spielstand verworfen). Echtes Pause-Menue: Schritt 9.
-      this.setState(S.MENU);
-    });
+    this.el.btnPause?.addEventListener('click', () => this.setState(S.MENU));
     this.el.btnShopContinue?.addEventListener('click', () => {
       this.roundIndex++;
       if (this._isMatchOver()) this.setState(S.GAME_OVER);
       else this.setState(S.ROUND_START);
     });
     this.el.btnBackMenu?.addEventListener('click', () => this.setState(S.MENU));
-  }
-
-  _startNewGame() {
-    this.scores = new Array(this.config.numPlayers).fill(0);
-    this.roundIndex = 0;
-    this.maxRounds = this.config.bestOf;
-    this.setState(S.ROUND_START);
   }
 
   start() {
@@ -114,14 +117,33 @@ export class Game {
       this._frames++;
       if (now - this._fpsT >= 500) {
         const fps = Math.round((this._frames * 1000) / (now - this._fpsT));
-        if (this.el.hudStatus) {
-          this.el.hudStatus.textContent = `${fps} fps · Wind ${this.wind}`;
-        }
+        if (this.el.hudStatus) this.el.hudStatus.textContent = `${fps} fps · Wind ${this.wind}`;
         this._frames = 0;
         this._fpsT = now;
       }
       this.input.endFrame();
     });
+  }
+
+  _startNewGame() {
+    this.scores = new Array(this.config.numPlayers).fill(0);
+    this.roundIndex = 0;
+    this.maxRounds = this.config.bestOf;
+
+    // Persistente Tanks: bleiben ueber Runden hinweg (Inventory + Credits).
+    this.tanks = [];
+    for (let i = 0; i < this.config.numPlayers; i++) {
+      const t = new Tank({
+        id: PLAYER_NAMES[i],
+        name: PLAYER_NAMES[i],
+        color: TANK_COLORS[i % TANK_COLORS.length],
+        x: 0
+      });
+      t.selectedWeapon = 'standard';
+      this.tanks.push(t);
+    }
+
+    this.setState(S.ROUND_START);
   }
 
   setState(next) {
@@ -146,23 +168,22 @@ export class Game {
         this._hideBanner();
         this._showOnly('hud');
         break;
-      case S.PROJECTILE_FLYING:
-        break;
-      case S.IMPACT:
-        break;
       case S.ROUND_END: {
         const alive = this._aliveTanks();
         if (alive.length === 1) {
           const winner = alive[0];
           const idx = this.tanks.indexOf(winner);
           if (idx >= 0) this.scores[idx] = (this.scores[idx] ?? 0) + 1;
-          this._showBanner(`${winner.name} gewinnt die Runde!`, this._scoresLine(), winner.color);
+          winner.credits += ROUND_SURVIVOR_BONUS;
+          this._showBanner(`${winner.name} gewinnt die Runde!`, `+${ROUND_SURVIVOR_BONUS} Credits · ${this._scoresLine()}`, winner.color);
         } else {
           this._showBanner('Patt — alle ausgeschaltet', this._scoresLine(), '#94a3b8');
         }
         break;
       }
       case S.SHOP:
+        this.shopActiveIdx = 0;
+        this._populateShop();
         this._showOnly('shop');
         break;
       case S.GAME_OVER: {
@@ -180,59 +201,50 @@ export class Game {
   }
 
   _onExit(state) {
-    switch (state) {
-      case S.ROUND_END:
-        this._hideBanner();
-        break;
-      default:
-        break;
-    }
+    if (state === S.ROUND_END) this._hideBanner();
   }
 
   update(dt) {
     this.stateTime += dt;
+
+    // Effekte (Napalm) laufen waehrend PROJECTILE_FLYING und IMPACT.
+    if (this.state === S.PROJECTILE_FLYING || this.state === S.IMPACT) {
+      this._updateEffects(dt);
+    }
+
     switch (this.state) {
       case S.MENU:
-        // Keyboard-Shortcut zum Spielstart.
         if (this.input.consume('Enter') || this.input.consume('Space')) this._startNewGame();
         break;
-
       case S.ROUND_START:
-        // Banner kurz stehen lassen, dann Spieler-Turn.
-        if (this.stateTime > 1.0 || this.input.consume('Space')) {
-          this.setState(S.PLAYER_TURN);
-        }
+        if (this.stateTime > 1.0 || this.input.consume('Space')) this.setState(S.PLAYER_TURN);
         break;
-
       case S.PLAYER_TURN:
         this._updatePlayerTurn(dt);
         break;
-
       case S.PROJECTILE_FLYING:
-        this._updateProjectile(dt);
+        this._updateProjectiles(dt);
+        if (!this.projectile && this.subProjectiles.length === 0 && this.effects.length === 0) {
+          this.setState(S.IMPACT);
+        }
         break;
-
       case S.IMPACT:
-        // Kurze Pause fuer visuelles Feedback (Partikel kommen in Schritt 10).
-        if (this.stateTime > 0.45) {
+        if (this.effects.length === 0 && this.stateTime > 0.45) {
+          settleTanks(this.tanks, this.terrain);
           const alive = this._aliveTanks();
-          if (alive.length <= 1) {
-            this.setState(S.ROUND_END);
-          } else {
+          if (alive.length <= 1) this.setState(S.ROUND_END);
+          else {
             this._nextActiveTank();
             this.setState(S.PLAYER_TURN);
           }
         }
         break;
-
       case S.ROUND_END:
         if (this.stateTime > 0.6 && (this.input.consume('Space') || this.input.consume('Enter'))) {
-          // Gleich Game-Over checken (vor dem Shop), wenn der Match-Sieger schon feststeht.
           if (this._isMatchOver()) this.setState(S.GAME_OVER);
           else this.setState(S.SHOP);
         }
         break;
-
       case S.GAME_OVER:
         if (this.stateTime > 0.6 && (this.input.consume('Space') || this.input.consume('Enter'))) {
           this.setState(S.MENU);
@@ -256,53 +268,273 @@ export class Game {
     if (this.input.isDown('ArrowDown')) active.adjustPower(-powerSpeed);
 
     if (this.input.consume('Space')) this._fire();
-    if (this.input.consume('Tab')) {
-      this._nextActiveTank();
-    }
+    if (this.input.consume('Tab')) this._cycleWeapon(active, +1);
+    if (this.input.consume('KeyQ')) this._cycleWeapon(active, -1);
+    if (this.input.consume('KeyE')) this._cycleWeapon(active, +1);
   }
 
-  _updateProjectile(dt) {
-    if (!this.projectile) {
-      this.setState(S.IMPACT);
-      return;
-    }
-    const prevX = this.projectile.x;
-    const prevY = this.projectile.y;
-    this.projectile.update(dt, this.wind, {
-      width: this.renderer.width,
-      height: this.renderer.height
-    });
-    if (this.projectile.alive) {
-      const impact = checkProjectileImpact(
-        this.projectile,
-        prevX,
-        prevY,
-        this.terrain,
-        this.tanks
-      );
-      if (impact) {
-        const radius = 35;
-        const damage = 25;
-        this.terrain.carve(impact.x, impact.y, radius);
-        applyBlast(impact, this.tanks, radius, damage);
-        settleTanks(this.tanks, this.terrain);
-        this.projectile.alive = false;
-      }
-    }
-    if (!this.projectile.alive) {
-      this.projectile = null;
-      this.setState(S.IMPACT);
-    }
+  _cycleWeapon(tank, dir) {
+    const available = WEAPON_ORDER.filter((id) => canFire(tank, id));
+    if (available.length === 0) return;
+    let i = available.indexOf(tank.selectedWeapon);
+    if (i < 0) i = 0;
+    i = (i + dir + available.length) % available.length;
+    tank.selectedWeapon = available[i];
   }
+
+  // -- Schiessen --------------------------------------------------------------
 
   _fire() {
     const t = this.tanks[this.activeIndex];
     if (!t || !t.alive) return;
+    const wid = canFire(t, t.selectedWeapon) ? t.selectedWeapon : 'standard';
+    const w = WEAPONS[wid];
+    consumeWeapon(t, wid);
+
     const tip = t.turretTip();
     const { vx, vy } = muzzleVelocity(t.turretAngle, t.power);
-    this.projectile = new Projectile({ x: tip.x, y: tip.y, vx, vy, ownerId: t.id });
+    this.projectile = new Projectile({
+      x: tip.x,
+      y: tip.y,
+      vx,
+      vy,
+      ownerId: t.id,
+      weaponId: wid,
+      color: w.color || '#fbbf24',
+      radius: wid === 'nuke' ? 5 : wid === 'roller' || wid === 'driller' ? 4 : 3
+    });
     this.setState(S.PROJECTILE_FLYING);
   }
+
+  // -- Projektil-Update -------------------------------------------------------
+
+  _updateProjectiles(dt) {
+    const bounds = { width: this.renderer.width, height: this.renderer.height };
+
+    if (this.projectile) {
+      this._stepProjectile(this.projectile, dt, bounds, /*isChild*/ false);
+      if (!this.projectile.alive) this.projectile = null;
+    }
+    for (const p of this.subProjectiles) {
+      if (!p.alive) continue;
+      this._stepProjectile(p, dt, bounds, /*isChild*/ true);
+    }
+    this.subProjectiles = this.subProjectiles.filter((p) => p.alive);
+  }
+
+  _stepProjectile(p, dt, bounds, isChild) {
+    if (p.mode === 'rolling') return this._stepRolling(p, dt, bounds);
+    if (p.mode === 'drilling') return this._stepDrilling(p, dt, bounds);
+
+    const prevX = p.x;
+    const prevY = p.y;
+    p.update(dt, this.wind, bounds);
+
+    // Apex-Split (Streubombe/MIRV) — nur bei Hauptgeschoss, nicht bei Kindern.
+    if (!isChild) {
+      const w = WEAPONS[p.weaponId];
+      if (w?.splitOnApex && !p.didSplit && p.vy >= 0 && p.age > 0.15) {
+        p.didSplit = true;
+        this._splitAtApex(p, w);
+        p.alive = false;
+        return;
+      }
+    }
+
+    if (p.alive) {
+      const impact = checkProjectileImpact(p, prevX, prevY, this.terrain, this.tanks);
+      if (impact) this._handleImpact(p, impact);
+    }
+  }
+
+  _splitAtApex(p, w) {
+    const n = w.splitOnApex;
+    const spread = w.splitSpread || 80;
+    // Kinder erben die x-Geschwindigkeit, bekommen leicht versetzte x + verschiedene vx.
+    for (let i = 0; i < n; i++) {
+      const t = n === 1 ? 0.5 : i / (n - 1); // 0..1
+      const dvx = (t - 0.5) * spread; // -spread/2 .. +spread/2
+      const child = new Projectile({
+        x: p.x + (t - 0.5) * 12,
+        y: p.y - 4,
+        vx: p.vx + dvx,
+        vy: 30 + (i % 2) * 20, // leicht nach unten
+        ownerId: p.ownerId,
+        weaponId: 'standard', // Kinder = Standard-Sprengkopf
+        color: w.color || '#fbbf24',
+        radius: 3,
+        isChild: true
+      });
+      this.subProjectiles.push(child);
+    }
+  }
+
+  _handleImpact(p, impact) {
+    const w = WEAPONS[p.weaponId] || WEAPONS.standard;
+
+    // Mode-Wechsel statt Detonation?
+    if (w.rollOnImpact && p.mode === 'flying') {
+      p.mode = 'rolling';
+      p.x = impact.x;
+      p.y = Math.max(0, this.terrain.surfaceY(impact.x) - 2);
+      p.rollTime = 0;
+      return;
+    }
+    if (w.drillOnImpact && p.mode === 'flying') {
+      p.mode = 'drilling';
+      p.drillRemaining = w.drillOnImpact.distance;
+      const speed = w.drillOnImpact.speed;
+      const len = Math.hypot(p.vx, p.vy) || 1;
+      p.vx = (p.vx / len) * speed;
+      p.vy = (p.vy / len) * speed;
+      p.x = impact.x;
+      p.y = impact.y;
+      return;
+    }
+
+    // Direktdetonation (Standard, Heavy, Cluster-Kind, MIRV-Kind, Nuke + Tank-Hits aller anderen).
+    this._detonate(p, impact, w);
+    p.alive = false;
+  }
+
+  _detonate(p, impact, w) {
+    this.terrain.carve(impact.x, impact.y, w.blastRadius);
+    const hits = applyBlast(impact, this.tanks, w.blastRadius, w.damage);
+    this._awardCredits(p.ownerId, hits);
+
+    if (w.napalm) this._spawnNapalm(impact, w.napalm);
+    if (w.shake) {
+      // Hook fuer Schritt 10 (Screen-Shake). Hier nur als Datenpunkt vermerken.
+      this._pendingShake = w.shake;
+    }
+  }
+
+  _stepRolling(p, dt, bounds) {
+    // Rolle entlang Terrain-Oberflaeche; Hangneigung beschleunigt, Reibung bremst.
+    const w = WEAPONS[p.weaponId];
+    const cfg = w?.rollOnImpact;
+    if (!cfg) {
+      p.alive = false;
+      return;
+    }
+    p.rollTime += dt;
+    if (p.rollTime > cfg.maxRollTime) {
+      this._detonate(p, { x: p.x, y: p.y }, w);
+      p.alive = false;
+      return;
+    }
+
+    // Neigung am aktuellen Standort.
+    const x0 = Math.max(2, Math.floor(p.x - 2));
+    const x1 = Math.min(this.terrain.width - 3, Math.floor(p.x + 2));
+    const slope = (this.terrain.heights[x1] - this.terrain.heights[x0]) / Math.max(1, x1 - x0);
+    // a_x = g * sin(atan(slope)) ≈ g * slope/sqrt(1+slope^2)
+    const ax = 600 * cfg.gravityFactor * (slope / Math.sqrt(1 + slope * slope));
+    p.vx += ax * dt;
+    // Reibung
+    const dragSign = Math.sign(p.vx);
+    p.vx -= dragSign * cfg.friction * dt;
+    if (Math.abs(p.vx) < 5 && Math.abs(slope) < 0.05) {
+      // ausgerollt
+      this._detonate(p, { x: p.x, y: p.y }, w);
+      p.alive = false;
+      return;
+    }
+    p.x += p.vx * dt;
+    p.y = this.terrain.surfaceY(p.x) - 2;
+    p.trail.push({ x: p.x, y: p.y });
+    if (p.trail.length > 24) p.trail.shift();
+
+    // Tank-Treffer waehrend des Rollens?
+    for (const tank of this.tanks) {
+      if (!tank.alive) continue;
+      if (Math.abs(tank.x - p.x) < 18 && Math.abs(tank.y - p.y) < 24) {
+        this._detonate(p, { x: p.x, y: p.y }, w);
+        p.alive = false;
+        return;
+      }
+    }
+    if (p.x < 0 || p.x > bounds.width) {
+      p.alive = false;
+    }
+  }
+
+  _stepDrilling(p, dt, bounds) {
+    const w = WEAPONS[p.weaponId];
+    const cfg = w?.drillOnImpact;
+    if (!cfg) {
+      p.alive = false;
+      return;
+    }
+    const dx = p.vx * dt;
+    const dy = p.vy * dt;
+    p.x += dx;
+    p.y += dy;
+    const dist = Math.hypot(dx, dy);
+    p.drillRemaining -= dist;
+
+    // Beim Durchbohren entstehen kleine Krater laengs des Tunnels.
+    this.terrain.carve(p.x, p.y, 8);
+    p.trail.push({ x: p.x, y: p.y });
+    if (p.trail.length > 24) p.trail.shift();
+
+    // Tank-Treffer beim Durchbohren?
+    for (const tank of this.tanks) {
+      if (!tank.alive) continue;
+      if (Math.abs(tank.x - p.x) < 18 && Math.abs(tank.y - p.y) < 24) {
+        this._detonate(p, { x: p.x, y: p.y }, w);
+        p.alive = false;
+        return;
+      }
+    }
+
+    if (p.drillRemaining <= 0 || p.x < 0 || p.x > bounds.width || p.y > bounds.height) {
+      this._detonate(p, { x: p.x, y: p.y }, w);
+      p.alive = false;
+    }
+  }
+
+  _spawnNapalm(impact, cfg) {
+    for (let i = 0; i < cfg.blobCount; i++) {
+      const t = i / (cfg.blobCount - 1 || 1);
+      const x = impact.x + (t - 0.5) * cfg.blobSpreadX;
+      const y = this.terrain.surfaceY(x) - 4;
+      this.effects.push(
+        new FireBlob({
+          x,
+          y,
+          radius: cfg.radius,
+          tickDamage: cfg.tickDamage,
+          ticksRemaining: cfg.ticks,
+          tickInterval: cfg.tickInterval
+        })
+      );
+    }
+  }
+
+  _updateEffects(dt) {
+    for (const e of this.effects) {
+      const hits = e.update(dt, this.tanks);
+      if (hits.length) {
+        // Napalm-Schaden ist anonym — niemand bekommt Credits dafuer (Designentscheidung).
+      }
+    }
+    this.effects = this.effects.filter((e) => e.alive);
+  }
+
+  // -- Credits ---------------------------------------------------------------
+
+  _awardCredits(shooterId, hits) {
+    const shooter = this.tanks.find((t) => t.id === shooterId);
+    if (!shooter) return;
+    for (const h of hits) {
+      if (h.tank === shooter) continue; // kein Self-Credit
+      shooter.credits += h.dmg * HIT_CREDITS_PER_HP;
+      if (!h.tank.alive) shooter.credits += KILL_BONUS;
+    }
+  }
+
+  // -- Runde / Match ---------------------------------------------------------
 
   _beginRound() {
     const seed = ((this.roundIndex + 1) * 1000003) ^ ((Math.random() * 1e9) >>> 0);
@@ -311,19 +543,24 @@ export class Game {
     this.wind = generateWind(rng);
     this.skyIndex = (this.roundIndex + Math.floor(rng() * 3)) % 3;
 
-    const xs = pickSpawnPositions(this.config.numPlayers, this.renderer.width, rng);
-    this.tanks = xs.map((x, i) => {
-      const t = new Tank({
-        id: PLAYER_NAMES[i],
-        name: PLAYER_NAMES[i],
-        color: TANK_COLORS[i % TANK_COLORS.length],
-        x
-      });
+    // Persistente Tanks: Position + HP fuer neue Runde resetten, Inventory + Credits behalten.
+    const xs = pickSpawnPositions(this.tanks.length, this.renderer.width, rng);
+    this.tanks.forEach((t, i) => {
+      t.x = xs[i];
+      t.y = 0;
+      t.hp = t.maxHp;
+      t.alive = true;
+      t.turretAngle = 90;
+      t.power = 50;
+      // Falls die ausgewaehlte Waffe nicht mehr verfuegbar -> auf Standard zurueck.
+      if (!canFire(t, t.selectedWeapon)) t.selectedWeapon = 'standard';
       t.snapToTerrain(this.terrain);
-      return t;
     });
+
     this.activeIndex = 0;
     this.projectile = null;
+    this.subProjectiles = [];
+    this.effects = [];
     this._renderPlayersHud();
   }
 
@@ -341,12 +578,10 @@ export class Game {
 
   _isMatchOver() {
     if (this.roundIndex >= this.maxRounds) return true;
-    // Klassisches Best-of: jemand kann nicht mehr eingeholt werden.
     const top = Math.max(...this.scores, 0);
     const remaining = this.maxRounds - this.roundIndex;
     const threshold = Math.floor(this.maxRounds / 2) + 1;
     if (top >= threshold) return true;
-    // Auch Game-Over, wenn alle bis auf einen "rechnerisch raus" sind.
     const others = this.scores.filter((_, i) => this.scores[i] !== top);
     if (others.length > 0 && top - Math.max(...others, 0) > remaining) return true;
     return false;
@@ -365,10 +600,10 @@ export class Game {
   }
 
   _scoresLine() {
-    return this.tanks
-      .map((t, i) => `${t.name}:${this.scores[i] ?? 0}`)
-      .join(' · ');
+    return this.tanks.map((t, i) => `${t.name}:${this.scores[i] ?? 0}`).join(' · ');
   }
+
+  // -- HUD -------------------------------------------------------------------
 
   _renderPlayersHud() {
     if (!this.el.hudPlayers) return;
@@ -380,11 +615,12 @@ export class Game {
         return `
           <div class="flex items-center gap-2 ${dim}">
             <span class="inline-block w-2 h-2 rounded-sm" style="background:${t.color}"></span>
-            <span class="text-white text-[10px] w-8" data-pid="${i}">${t.name}</span>
+            <span class="text-white text-[10px] w-8">${t.name}</span>
             <span class="relative inline-block w-20 h-2 bg-black/50 rounded-sm overflow-hidden">
               <span class="absolute inset-y-0 left-0" style="width:${ratio * 100}%; background:${this._hpColor(ratio)}"></span>
             </span>
             <span class="text-tw-accent text-[10px]">x${wins}</span>
+            <span class="text-emerald-300 text-[10px]">${t.credits}¢</span>
           </div>`;
       })
       .join('');
@@ -416,8 +652,86 @@ export class Game {
       if (k === name) this.el[k].classList.remove('hidden');
       else this.el[k].classList.add('hidden');
     }
-    // Banner ist orthogonal — nicht hier ausblenden.
   }
+
+  // -- Shop -------------------------------------------------------------------
+
+  _populateShop() {
+    if (!this.el.shopGrid) return;
+
+    // Spieler-Tabs (welcher Tank kauft gerade)
+    if (this.el.shopPlayerTabs) {
+      this.el.shopPlayerTabs.innerHTML = this.tanks
+        .map(
+          (t, i) => `
+          <button data-shop-tab="${i}"
+            class="shop-tab font-pixel text-[10px] px-3 py-2 rounded border transition
+              ${i === this.shopActiveIdx ? 'bg-tw-accent text-tw-bg border-tw-accent' : 'bg-tw-panel/60 text-white/80 border-white/10 hover:border-white/30'}"
+            style="${i === this.shopActiveIdx ? '' : `border-left:3px solid ${t.color}`}">
+            ${t.name} · ${t.credits}¢
+          </button>`
+        )
+        .join('');
+      this.el.shopPlayerTabs.querySelectorAll('button[data-shop-tab]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          const idx = parseInt(/** @type {HTMLElement} */ (e.currentTarget).dataset.shopTab || '0', 10);
+          this.shopActiveIdx = idx;
+          this._populateShop();
+        });
+      });
+    }
+
+    const tank = this.tanks[this.shopActiveIdx];
+    if (this.el.shopHeader) {
+      this.el.shopHeader.textContent = `${tank.name} · ${tank.credits} Credits`;
+      this.el.shopHeader.style.color = tank.color;
+    }
+
+    this.el.shopGrid.innerHTML = WEAPON_ORDER.map((id) => {
+      const w = WEAPONS[id];
+      const owned = w.unlimited ? '∞' : (tank.inventory.get(id) ?? 0);
+      const affordable = w.unlimited || tank.credits >= w.price;
+      const buyBtn = w.unlimited
+        ? `<span class="font-pixel text-[10px] text-emerald-400">unbegrenzt</span>`
+        : `<button data-buy="${id}"
+            class="font-pixel text-[10px] px-3 py-1 rounded transition
+              ${affordable ? 'bg-tw-accent text-tw-bg hover:bg-yellow-300' : 'bg-white/5 text-white/30 cursor-not-allowed'}"
+            ${affordable ? '' : 'disabled'}>Kaufen ${w.price}¢</button>`;
+      return `
+        <div class="bg-tw-bg/60 border border-white/10 rounded p-3 flex flex-col gap-2"
+             style="border-left: 3px solid ${w.color}">
+          <div class="flex items-center justify-between">
+            <div class="font-pixel text-xs text-white">${w.icon} ${w.name}</div>
+            <div class="font-pixel text-[10px] text-tw-accent">×${owned}</div>
+          </div>
+          <div class="font-pixel text-[9px] text-white/60 leading-relaxed">${w.desc}</div>
+          <div class="font-pixel text-[9px] text-white/40">
+            Schaden ${w.damage} · Radius ${w.blastRadius}
+          </div>
+          <div class="mt-auto flex justify-end">${buyBtn}</div>
+        </div>`;
+    }).join('');
+
+    this.el.shopGrid.querySelectorAll('button[data-buy]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const id = /** @type {HTMLElement} */ (e.currentTarget).dataset.buy;
+        if (!id) return;
+        this._buyWeapon(this.shopActiveIdx, id);
+      });
+    });
+  }
+
+  _buyWeapon(tankIdx, weaponId) {
+    const tank = this.tanks[tankIdx];
+    const w = WEAPONS[weaponId];
+    if (!tank || !w || w.unlimited) return;
+    if (tank.credits < w.price) return;
+    tank.credits -= w.price;
+    tank.inventory.set(weaponId, (tank.inventory.get(weaponId) ?? 0) + 1);
+    this._populateShop();
+  }
+
+  // -- Render ----------------------------------------------------------------
 
   render(now) {
     this.renderer.drawSky(this.skyIndex);
@@ -429,22 +743,28 @@ export class Game {
         this.renderer.drawTank(this.tanks[i], showActive, now);
       }
       if (this.projectile) this.renderer.drawProjectile(this.projectile);
+      for (const sp of this.subProjectiles) this.renderer.drawProjectile(sp);
+      for (const e of this.effects) this.renderer.drawFireBlob(e, now);
       this.renderer.drawWindIndicator(this.wind);
     }
 
-    // HUD-Werte aktualisieren.
     if (this.state === S.PLAYER_TURN || this.state === S.PROJECTILE_FLYING) {
       const active = this.tanks[this.activeIndex];
       if (active) {
         if (this.el.hudActive) {
-          this.el.hudActive.textContent =
-            active.name + (this.state === S.PROJECTILE_FLYING ? ' (im Flug)' : '');
+          this.el.hudActive.textContent = active.name + (this.state === S.PROJECTILE_FLYING ? ' (im Flug)' : '');
           this.el.hudActive.style.color = active.color;
         }
         if (this.el.hudAngle) this.el.hudAngle.textContent = `${Math.round(active.turretAngle)}°`;
         if (this.el.hudPower) this.el.hudPower.textContent = `${Math.round(active.power)}`;
+        if (this.el.hudWeapon) {
+          const w = WEAPONS[active.selectedWeapon] || WEAPONS.standard;
+          const stock = w.unlimited ? '∞' : active.inventory.get(w.id) ?? 0;
+          this.el.hudWeapon.textContent = `${w.icon} ${w.name} ×${stock}`;
+          this.el.hudWeapon.style.color = w.color || '#fff';
+        }
       }
-      // HP-Liste live aktualisieren.
+      // Live HP-Bars + credits.
       if (this.el.hudPlayers) {
         const rows = this.el.hudPlayers.children;
         for (let i = 0; i < rows.length && i < this.tanks.length; i++) {
@@ -452,6 +772,9 @@ export class Game {
           const bar = rows[i].querySelector('span > span');
           if (bar) bar.style.width = `${(t.hp / t.maxHp) * 100}%`;
           rows[i].classList.toggle('opacity-40', !t.alive);
+          // Credits-Span ist letztes Kind
+          const credEl = rows[i].lastElementChild;
+          if (credEl) credEl.textContent = `${t.credits}¢`;
         }
       }
     }

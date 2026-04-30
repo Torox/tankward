@@ -240,6 +240,34 @@ export class Renderer {
     ctx.textBaseline = 'alphabetic';
   }
 
+  /**
+   * Zeichnet einen Brand-Blob (Napalm). Pulsierend, leichte Sub-Flammen.
+   * @param {import('../entities/fire-blob.js').FireBlob} blob
+   * @param {number} now
+   */
+  drawFireBlob(blob, now) {
+    if (!blob.alive) return;
+    const ctx = this.ctx;
+    const pulse = 0.85 + Math.sin(now / 80 + blob.x * 0.1) * 0.15;
+    const r = blob.radius * pulse;
+
+    // Aussenglow
+    const grad = ctx.createRadialGradient(blob.x, blob.y, 2, blob.x, blob.y, r);
+    grad.addColorStop(0, 'rgba(255, 220, 80, 0.95)');
+    grad.addColorStop(0.45, 'rgba(239, 68, 68, 0.7)');
+    grad.addColorStop(1, 'rgba(124, 45, 18, 0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(blob.x, blob.y, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Innerer Flammenkern
+    ctx.fillStyle = 'rgba(255, 255, 200, 0.9)';
+    ctx.beginPath();
+    ctx.arc(blob.x, blob.y, Math.max(2, r * 0.25), 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   /** Vollbild loeschen — wird vor jedem Frame aufgerufen. */
   clear() {
     this.ctx.clearRect(0, 0, this.width, this.height);

@@ -19,10 +19,11 @@ app.innerHTML = `
       class="font-pixel text-sm bg-tw-accent text-tw-bg px-6 py-3 rounded shadow hover:bg-yellow-300 transition">
       Neues Spiel
     </button>
-    <div class="font-pixel text-[10px] text-white/40 max-w-sm">
-      ← → Winkel · ↑ ↓ Stärke · Shift = fein · Leertaste = Feuer · Tab = Skip
+    <div class="font-pixel text-[10px] text-white/40 max-w-sm leading-relaxed">
+      ← → Winkel · ↑ ↓ Stärke · Shift = fein<br>
+      Leertaste = Feuer · Tab/E = Waffe · Q = Waffe zurück
     </div>
-    <div class="font-pixel text-[9px] text-white/30">v0.6 — Schritt 6/11</div>
+    <div class="font-pixel text-[9px] text-white/30">v0.7 — Schritt 7/11</div>
   </div>
 
   <div id="screen-hud" class="hidden">
@@ -33,17 +34,19 @@ app.innerHTML = `
       </button>
     </div>
     <div class="absolute bottom-3 inset-x-3 flex flex-wrap gap-3 items-end justify-between font-pixel text-[10px] pointer-events-none">
-      <div class="bg-tw-panel/80 border border-white/10 rounded p-3 min-w-[200px]">
+      <div class="bg-tw-panel/80 border border-white/10 rounded p-3 min-w-[220px]">
         <div class="text-white/70 mb-1">Aktiver Spieler</div>
         <div id="hud-active" class="text-tw-accent text-sm">P1</div>
         <div class="mt-2">Winkel: <span id="hud-angle" class="text-emerald-400">90°</span></div>
         <div>Stärke: <span id="hud-power" class="text-emerald-400">50</span></div>
+        <div class="mt-2 text-white/70">Waffe</div>
+        <div id="hud-weapon" class="text-tw-accent">● Standard ×∞</div>
       </div>
       <div id="hud-players" class="bg-tw-panel/80 border border-white/10 rounded p-3 max-w-md flex flex-col gap-1"></div>
       <div class="bg-tw-panel/80 border border-white/10 rounded p-3 text-white/70 max-w-md">
         <div class="text-white mb-1">Steuerung</div>
         <div>← → Winkel · ↑ ↓ Stärke · Shift = fein</div>
-        <div>Leertaste = Feuer · Tab = Skip</div>
+        <div>Leertaste = Feuer · Tab/E = Waffe · Q = zurück</div>
         <div id="hud-status" class="text-emerald-400 mt-2">—</div>
       </div>
     </div>
@@ -56,13 +59,15 @@ app.innerHTML = `
     </div>
   </div>
 
-  <div id="screen-shop" class="screen hidden flex items-center justify-center bg-black/50">
-    <div class="bg-tw-panel border border-white/20 rounded-lg p-6 max-w-2xl w-[90%]">
-      <div class="font-pixel text-xl text-tw-accent mb-3">Shop</div>
-      <p class="font-pixel text-[10px] text-white/70 mb-6 leading-relaxed">
-        Waffen-Sortiment kommt in Schritt 7. Erstmal: Bestaetigen, um zur naechsten Runde zu starten.
-      </p>
-      <div class="flex justify-end">
+  <div id="screen-shop" class="screen hidden flex items-center justify-center bg-black/60 overflow-auto">
+    <div class="bg-tw-panel border border-white/20 rounded-lg p-5 max-w-5xl w-[95%] max-h-[92vh] flex flex-col">
+      <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div class="font-pixel text-xl text-tw-accent">Shop</div>
+        <div id="shop-header" class="font-pixel text-xs text-tw-accent">—</div>
+      </div>
+      <div id="shop-player-tabs" class="flex flex-wrap gap-2 mb-4"></div>
+      <div id="shop-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 overflow-auto"></div>
+      <div class="flex justify-end mt-4">
         <button id="btn-shop-continue"
           class="font-pixel text-sm bg-tw-accent text-tw-bg px-6 py-3 rounded hover:bg-yellow-300 transition">
           Nächste Runde

@@ -18,7 +18,7 @@ export class Projectile {
    * @param {string} [opts.ownerId]   ID des Schiessenden (fuer Self-Damage-Filter etc.)
    * @param {string} [opts.weaponId]  Welche Waffe — relevant ab Schritt 5
    */
-  constructor({ x, y, vx, vy, color = '#fbbf24', radius = 3, ownerId = '', weaponId = 'standard' }) {
+  constructor({ x, y, vx, vy, color = '#fbbf24', radius = 3, ownerId = '', weaponId = 'standard', isChild = false }) {
     this.x = x;
     this.y = y;
     this.vx = vx;
@@ -31,6 +31,15 @@ export class Projectile {
     /** @type {{x:number,y:number}[]} Trail-Punkte fuer das Rendering */
     this.trail = [];
     this.age = 0;
+    /** @type {'flying'|'rolling'|'drilling'} */
+    this.mode = 'flying';
+    /** Splits passieren nur einmal pro Projektil. */
+    this.didSplit = false;
+    /** True, wenn dieses Projektil eine Submunition ist (Streubombe/MIRV-Kind). */
+    this.isChild = isChild;
+    /** Roll-/Bohr-Zaehler werden bei Bedarf von Game gesetzt. */
+    this.rollTime = 0;
+    this.drillRemaining = 0;
   }
 
   /**

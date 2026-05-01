@@ -6,6 +6,14 @@
  * Numerische Werte sind Tuning-Parameter — Aenderungen koennen sich stark
  * auf das Spielgefuehl auswirken.
  */
+/**
+ * Pseudo-Masse je Waffe — beeinflusst Kinetik-Bonus bei Direkttreffern und
+ * (ab Phase 1.2) Penetrations-Tiefe ins Terrain. Skala: 1 = leicht, 30 = brutal.
+ *
+ * caseHardness (Phase 1.2) regelt, wie tief die Granate sich ins Erdreich bohrt
+ * bevor sie detoniert: 0 = detoniert sofort beim Aufprall, 1 = Standard,
+ * >1 = AP-aehnlich. Default 1.0 fuer alle, individuell tunbar.
+ */
 export const WEAPONS = {
   standard: {
     id: 'standard',
@@ -14,6 +22,8 @@ export const WEAPONS = {
     unlimited: true,
     blastRadius: 35,
     damage: 25,
+    mass: 4,
+    caseHardness: 1.0,
     color: '#fbbf24',
     icon: '●',
     desc: 'Solide Standardwaffe. Unbegrenzt verfügbar.'
@@ -24,6 +34,8 @@ export const WEAPONS = {
     price: 500,
     blastRadius: 60,
     damage: 50,
+    mass: 10,
+    caseHardness: 1.0,
     color: '#f97316',
     icon: '◉',
     desc: 'Größerer Sprengradius, doppelter Schaden.'
@@ -34,6 +46,8 @@ export const WEAPONS = {
     price: 1000,
     blastRadius: 25,
     damage: 30,
+    mass: 3,
+    caseHardness: 0.4,
     splitOnApex: 3,
     splitSpread: 100,
     color: '#a3e635',
@@ -46,6 +60,8 @@ export const WEAPONS = {
     price: 1500,
     blastRadius: 50,
     damage: 15,
+    mass: 5,
+    caseHardness: 0.6,
     napalm: {
       blobCount: 7,
       blobSpreadX: 70,
@@ -64,6 +80,8 @@ export const WEAPONS = {
     price: 800,
     blastRadius: 25,
     damage: 40,
+    mass: 6,
+    caseHardness: 0.0, // rollt — bohrt nie
     rollOnImpact: { friction: 60, gravityFactor: 0.7, maxRollTime: 4 },
     color: '#9ca3af',
     icon: '○',
@@ -75,6 +93,8 @@ export const WEAPONS = {
     price: 1200,
     blastRadius: 45,
     damage: 60,
+    mass: 8,
+    caseHardness: 0.0, // hat eigene drill-Logik mit fester Distanz
     drillOnImpact: { distance: 80, speed: 90 },
     color: '#78350f',
     icon: '✦',
@@ -86,6 +106,8 @@ export const WEAPONS = {
     price: 2500,
     blastRadius: 30,
     damage: 35,
+    mass: 5,
+    caseHardness: 0.4,
     splitOnApex: 5,
     splitSpread: 160,
     color: '#22d3ee',
@@ -98,6 +120,8 @@ export const WEAPONS = {
     price: 5000,
     blastRadius: 120,
     damage: 100,
+    mass: 30,
+    caseHardness: 1.5, // schweres Gehaeuse, bohrt sich tief ein
     shake: { magnitude: 18, duration: 0.7 },
     color: '#fde047',
     icon: '☢',

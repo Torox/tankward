@@ -750,14 +750,33 @@ export class Game {
       return;
     }
 
-    // Direktdetonation (Standard, Heavy, Cluster-Kind, MIRV-Kind, Nuke + Tank-Hits aller anderen).
-    this._detonate(p, impact, w);
+    // Kinetik-Bonus nur bei Tank-Direkttreffern (Terrain-Treffer entstehen oft
+    // nach gravity-bedingtem Geschwindigkeits-Verlust und sind unspektakulaer).
+    let kineticBonus = 0;
+    if (impact.type === 'tank') {
+      kineticBonus = computeKineticBonus(p, w);
+    }
+
+    this._detonate(p, impact, w, { kineticBonus });
     p.alive = false;
   }
 
-  _detonate(p, impact, w) {
+  _detonate(p, impact, w, opts = {}) {
     this.terrain.carve(impact.x, impact.y, w.blastRadius);
     const hits = applyBlast(impact, this.tanks, w.blastRadius, w.damage);
+
+    // Kinetik-Bonus: Direkttreffer-Tank bekommt zusaetzlichen Schaden basierend
+    // auf Geschwindigkeit² × Masse. Die Splash-Opfer kriegen den Bonus NICHT —
+    // sie sind nicht direkt getroffen worden.
+    if (impact.type === 'tank' && opts.kineticBonus > 0) {
+      const bonusDmg = Math.max(1, Math.round(w.damage * opts.kineticBonus));
+      impact.tank.takeDamage(bonusDmg);
+      // Treffer-Liste fuer Credits ergaenzen / aufaddieren.
+      const existing = hits.find((h) => h.tank === impact.tank);
+      if (existing) existing.dmg += bonusDmg;
+      else hits.push({ tank: impact.tank, dmg: bonusDmg });
+    }
+
     this._awardCredits(p.ownerId, hits);
 
     // Lernen fuer "expert"-KI: dem Schuetzen den Treffer zurueckmelden.
@@ -1327,4 +1346,25 @@ function shortName(name) {
 
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
+}
+
+/**
+ * Kinetik-Bonus bei Direkttreffern: schneller, schwerer Schuss richtet bis zu
+ * +50 % zusaetzlichen Schaden an.
+ *
+ * Eichung:
+ *   Standard-Granate (mass 4) bei v=900 px/s -> +40 %
+ *   Standard-Granate (mass 4) bei v=300 px/s ->  +4 %
+ *   Atombombe (mass 30) bei v=900 px/s -> capped auf +50 %
+ *
+ * Damit lohnt sich „Sniper-Stil" mit niedriger Flugbahn (= hoher Power, wenig
+ * Gravity-Verlust) gegenueber Lobs, ohne dass kleine Munition zur Atombombe
+ * mutiert.
+ */
+function computeKineticBonus(p, w) {
+  const speed = Math.hypot(p.vx, p.vy);
+  const m = w.mass ?? 4;
+  // Skalierung: 0.5 * m * v² / kRef
+  const kRef = 4_000_000;
+  return Math.min(0.5, (0.5 * m * speed * speed) / kRef);
 }

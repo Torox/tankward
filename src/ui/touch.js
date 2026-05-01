@@ -164,6 +164,10 @@ function bindAimButtons(game) {
     'power-down':  ['powerDir', -1]
   };
 
+  // Sofort-Klick-Mengen bei Pointer-Down (kurzer Tap fuer feine Anpassung):
+  const TAP_POWER = 5;   // ±5 Power pro Tap (bei Range 0..1000)
+  const TAP_ANGLE = 0.5; // ±0.5° pro Tap
+
   panel.querySelectorAll('button[data-aim]').forEach((btn) => {
     const action = btn.getAttribute('data-aim');
     const cfg = apply[action];
@@ -173,10 +177,22 @@ function bindAimButtons(game) {
     const press = (e) => {
       e.preventDefault();
       try { btn.setPointerCapture?.(e.pointerId); } catch (_) {}
+      // Sofort-Tap: kleiner Klick auch bei <50ms Beruehrung. Garantiert
+      // dass kurzes Antippen immer eine sichtbare Aenderung ergibt.
+      const t = game.tanks[game.activeIndex];
+      if (t && t.alive && game.state === 'PLAYER_TURN') {
+        if (key === 'powerDir') t.adjustPower(value * TAP_POWER);
+        else if (key === 'angleDir') t.adjustAngle(value * TAP_ANGLE);
+      }
+      // Continuous-Mode mit Hold-Time-Tracking fuer Beschleunigung in game.js.
       game.aimInput[key] = value;
+      game.aimInput[`${key}_t0`] = performance.now();
     };
     const release = () => {
-      if (game.aimInput[key] === value) game.aimInput[key] = 0;
+      if (game.aimInput[key] === value) {
+        game.aimInput[key] = 0;
+        game.aimInput[`${key}_t0`] = 0;
+      }
     };
 
     btn.addEventListener('pointerdown', press);

@@ -571,9 +571,23 @@ export class Game {
     // Tastatur-Input.
     if (this.input.isDown('ArrowLeft')) active.adjustAngle(angleSpeed);
     if (this.input.isDown('ArrowRight')) active.adjustAngle(-angleSpeed);
-    // D-Pad-Input (mit gleicher Geschwindigkeit, additiv falls beide gedrueckt).
-    if (this.aimInput?.angleDir) active.adjustAngle(this.aimInput.angleDir * angleSpeed);
-    if (this.aimInput?.powerDir) active.adjustPower(this.aimInput.powerDir * powerSpeed);
+    // Touch-D-Pad-Input mit Tap-vs-Hold-Beschleunigung (Phase 1.7):
+    // Sofortiger Tap-Klick erfolgt schon in touch.js beim pointerdown. Hier
+    // skaliert der Continuous-Mode zusaetzlich mit der Halte-Dauer:
+    //   t < 0.4s  -> 0.3x..1.0x (lineares Anlaufen)
+    //   t >= 0.4s -> 1.0x..2.5x (lineares Beschleunigen, capped)
+    const aimAccel = (axis) => {
+      if (!this.aimInput?.[axis]) return 0;
+      const t0 = this.aimInput[`${axis}_t0`];
+      if (!t0) return 1;
+      const heldFor = (performance.now() - t0) / 1000;
+      if (heldFor < 0.4) return 0.3 + heldFor * 1.75;     // 0.3 -> 1.0
+      return Math.min(2.5, 1.0 + (heldFor - 0.4) * 1.0);  // 1.0 -> 2.5 ueber 1.5s
+    };
+    const angleAccel = aimAccel('angleDir');
+    const powerAccel = aimAccel('powerDir');
+    if (this.aimInput?.angleDir) active.adjustAngle(this.aimInput.angleDir * angleSpeed * angleAccel);
+    if (this.aimInput?.powerDir) active.adjustPower(this.aimInput.powerDir * powerSpeed * powerAccel);
     if (this.input.isDown('ArrowUp')) active.adjustPower(powerSpeed);
     if (this.input.isDown('ArrowDown')) active.adjustPower(-powerSpeed);
 

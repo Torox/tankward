@@ -529,6 +529,23 @@ export class Game {
       this._updateEffects(dt);
     }
 
+    // Phase 2.3: Gust-Mechanik in der Sturm-Stufe. ~3 % Chance pro Sekunde
+    // einen 1-Sekunden-Gust auszuloesen (2x base wind).
+    if (this._currentWindStage === 'gale') {
+      const now = this.stateTime;
+      if (this._gustActive && now >= this._gustEndsAt) {
+        this._gustActive = false;
+        this.wind = this.baseWind;
+      }
+      if (!this._gustActive && Math.random() < 0.03 * dt) {
+        this._gustActive = true;
+        this._gustEndsAt = now + 1.0;
+        // Gust-Richtung kann auch flippen — typische Sturm-Boe.
+        const flipChance = Math.random() < 0.3 ? -1 : 1;
+        this.wind = this.baseWind * 2 * flipChance;
+      }
+    }
+
     switch (this.state) {
       case S.MENU:
         if (this.input.consume('Enter') || this.input.consume('Space')) this._startNewGame();

@@ -19,6 +19,10 @@ export class Renderer {
     this.dpr = 1;
     /** Camera: zoom relativ zum Fit-Scale; pan in Welt-Koordinaten. */
     this.camera = { zoom: 1, panX: 0, panY: 0 };
+    /** Ziel-Camera (fuer animiertes Hin-Lerpen bei Game-getriebenen Aenderungen). */
+    this.targetCamera = { zoom: 1, panX: 0, panY: 0 };
+    /** 0 = sofortiges Snap; > 0 = Smoothing-Rate (groesser = schneller). */
+    this.smoothing = 0;
     /** Screen-Shake-Zustand (gesetzt von Game._detonate). */
     this.shakeMagnitude = 0;
     this.shakeTime = 0;
@@ -47,35 +51,42 @@ export class Renderer {
   }
 
   /**
-   * Setzt den Zoom-Faktor (1 = fit-to-viewport, > 1 = reingezoomt).
-   * Zoomt um den Viewport-Mittelpunkt — der zentrale Welt-Punkt bleibt
-   * unter dem Viewport-Zentrum, was sich natuerlich anfuehlt.
+   * Sofortiger Zoom (User-Input — Pinch, Mausrad, D-Pad). Verankert um
+   * den optionalen Welt-Punkt `anchor` (default: Viewport-Center), damit
+   * der Punkt unter dem Mauszeiger/Finger fix bleibt.
+   *
+   * @param {number} z neuer Zoom-Faktor
+   * @param {{x:number,y:number}} [anchor] Welt-Punkt der unverschoben bleibt
    */
-  setZoom(z) {
+  setZoom(z, anchor) {
     const newZoom = Math.max(1, Math.min(4, z));
     if (newZoom === this.camera.zoom) return;
-    // Welt-Position unterm Viewport-Center merken.
-    const center = this.screenToWorld(this.viewportW / 2, this.viewportH / 2);
+    const fixed = anchor ?? this.screenToWorld(this.viewportW / 2, this.viewportH / 2);
+    // Bestimme den Screen-Offset des Anker-Punkts vor dem Zoom.
+    const oldS = this._scale();
+    const screenOfAnchor = {
+      x: (fixed.x - this.camera.panX) * oldS,
+      y: (fixed.y - this.camera.panY) * oldS
+    };
     this.camera.zoom = newZoom;
-    // Bei zoom == 1 (fit): kein Pan noetig; Welt fuellt das Viewport.
     if (newZoom <= 1) {
       this.camera.panX = 0;
       this.camera.panY = 0;
-      return;
+    } else {
+      const newS = this._scale();
+      this.camera.panX = fixed.x - screenOfAnchor.x / newS;
+      this.camera.panY = fixed.y - screenOfAnchor.y / newS;
+      this._clampPan();
     }
-    // Pan so setzen, dass `center` weiterhin im Viewport-Mittelpunkt liegt.
-    const visibleW = this.viewportW / this._scale();
-    const visibleH = this.viewportH / this._scale();
-    this.camera.panX = center.x - visibleW / 2;
-    this.camera.panY = center.y - visibleH / 2;
-    this._clampPan();
+    this._syncTarget();
   }
 
-  /** Pan in Welt-Pixeln, akkumulativ. */
+  /** Pan in Welt-Pixeln, akkumulativ — fuer User-Input (Maus, 2-Finger). */
   pan(dx, dy) {
     this.camera.panX += dx;
     this.camera.panY += dy;
     this._clampPan();
+    this._syncTarget();
   }
 
   /** Setzt Pan auf (0,0) und Zoom auf 1 — typischer Reset bei neuer Runde. */
@@ -83,6 +94,53 @@ export class Renderer {
     this.camera.zoom = 1;
     this.camera.panX = 0;
     this.camera.panY = 0;
+    this._syncTarget();
+  }
+
+  /**
+   * Animiertes Setzen einer Ziel-Camera. Game ruft das fuer "smooth zur
+   * Gesamtuebersicht beim Schuss" oder "verfolge das Projektil".
+   *
+   * @param {{zoom?:number, panX?:number, panY?:number, centerWorld?:{x:number,y:number}}} target
+   * @param {number} [smoothing=8] Lerp-Rate pro Sekunde (0 = sofort)
+   */
+  setCameraTarget(target, smoothing = 8) {
+    if (target.zoom !== undefined) {
+      this.targetCamera.zoom = Math.max(1, Math.min(4, target.zoom));
+    }
+    if (target.centerWorld) {
+      // Pan so, dass centerWorld unter dem Viewport-Mittelpunkt landet.
+      const z = this.targetCamera.zoom;
+      const fitS = this._fitScale();
+      const s = fitS * z;
+      const visibleW = this.viewportW / s;
+      const visibleH = this.viewportH / s;
+      this.targetCamera.panX = target.centerWorld.x - visibleW / 2;
+      this.targetCamera.panY = target.centerWorld.y - visibleH / 2;
+    } else {
+      if (target.panX !== undefined) this.targetCamera.panX = target.panX;
+      if (target.panY !== undefined) this.targetCamera.panY = target.panY;
+    }
+    // Pan-Limits auf das Ziel anwenden.
+    if (this.targetCamera.zoom <= 1) {
+      this.targetCamera.panX = 0;
+      this.targetCamera.panY = 0;
+    } else {
+      const s = this._fitScale() * this.targetCamera.zoom;
+      const maxX = Math.max(0, this.worldW - this.viewportW / s);
+      const maxY = Math.max(0, this.worldH - this.viewportH / s);
+      this.targetCamera.panX = Math.max(0, Math.min(maxX, this.targetCamera.panX));
+      this.targetCamera.panY = Math.max(0, Math.min(maxY, this.targetCamera.panY));
+    }
+    this.smoothing = smoothing;
+  }
+
+  /** Stoppt Camera-Animation (= Target = aktuelle Camera). */
+  _syncTarget() {
+    this.targetCamera.zoom = this.camera.zoom;
+    this.targetCamera.panX = this.camera.panX;
+    this.targetCamera.panY = this.camera.panY;
+    this.smoothing = 0;
   }
 
   /** Fit-Scale: skaliert die Welt so, dass sie ins Viewport passt. */
@@ -137,6 +195,7 @@ export class Renderer {
    * @param {number} dt
    */
   beginFrame(dt) {
+    // Shake-Tick.
     if (this.shakeTime > 0) {
       this.shakeTime -= dt;
       const t = Math.max(0, this.shakeTime / this.shakeMaxTime);
@@ -148,7 +207,27 @@ export class Renderer {
       this._shakeDx = 0;
       this._shakeDy = 0;
     }
-    // Identity-Transform mit DPR + Shake (im Screen-Space).
+    // Camera-Lerp gegen Target (nur wenn Smoothing aktiv ist).
+    if (this.smoothing > 0) {
+      const a = 1 - Math.exp(-this.smoothing * Math.max(0, dt));
+      this.camera.zoom += (this.targetCamera.zoom - this.camera.zoom) * a;
+      this.camera.panX += (this.targetCamera.panX - this.camera.panX) * a;
+      this.camera.panY += (this.targetCamera.panY - this.camera.panY) * a;
+      // Bei sehr nahem Ziel: snappen + Smoothing aus.
+      const dz = Math.abs(this.targetCamera.zoom - this.camera.zoom);
+      const dp = Math.hypot(
+        this.targetCamera.panX - this.camera.panX,
+        this.targetCamera.panY - this.camera.panY
+      );
+      if (dz < 0.005 && dp < 0.5) {
+        this.camera.zoom = this.targetCamera.zoom;
+        this.camera.panX = this.targetCamera.panX;
+        this.camera.panY = this.targetCamera.panY;
+        this.smoothing = 0;
+      }
+      this._clampPan();
+    }
+    // Identity-Transform (Screen-Space) mit Shake-Offset.
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, this._shakeDx * this.dpr, this._shakeDy * this.dpr);
   }
 
@@ -365,11 +444,12 @@ export class Renderer {
     // Wind-Indikator ist ein HUD-Element (Screen-Space, nicht World-Space).
     this.applyScreenSpace();
     const ctx = this.ctx;
-    const isMobile = this.viewportW <= 720;
     const cx = this.viewportW / 2;
-    const pillW = isMobile ? 130 : 180;
+    const pillW = this.viewportW <= 720 ? 130 : 180;
     const pillH = 36;
-    const cy = isMobile ? 110 : 50;
+    // Immer unterhalb des oberen HUD-Streifens (das jetzt auf allen
+    // Plattformen oben sitzt).
+    const cy = 110;
     const textY = cy + 6;
     const arrowY = cy - 8;
     const maxArrow = isMobile ? 48 : 70;
@@ -438,10 +518,41 @@ export class Renderer {
     ctx.fill();
   }
 
+  /**
+   * Zeichnet die Trajektorie eines vergangenen Schusses als dezente,
+   * gestrichelte Linie in Spieler-Farbe. Wird in Welt-Space aufgerufen.
+   *
+   * @param {{x:number, y:number}[]} trail
+   * @param {string} color
+   */
+  drawShotTrail(trail, color) {
+    if (!trail || trail.length < 2) return;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.strokeStyle = colorWithAlpha(color, 0.4);
+    ctx.lineWidth = 1.4;
+    ctx.lineCap = 'round';
+    ctx.setLineDash([4, 6]);
+    ctx.beginPath();
+    ctx.moveTo(trail[0].x, trail[0].y);
+    for (let i = 1; i < trail.length; i++) ctx.lineTo(trail[i].x, trail[i].y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   /** Vollbild loeschen — wird vor jedem Frame aufgerufen. */
   clear() {
     this.ctx.clearRect(0, 0, this.viewportW, this.viewportH);
   }
+}
+
+function colorWithAlpha(hex, alpha) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!m) return hex;
+  const r = parseInt(m[1], 16);
+  const g = parseInt(m[2], 16);
+  const b = parseInt(m[3], 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 function roundRect(ctx, x, y, w, h, r) {

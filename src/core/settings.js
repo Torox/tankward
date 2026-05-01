@@ -12,7 +12,10 @@ const DEFAULTS = {
   numHumans: 1,
   aiDifficulty: 'pro',
   bestOf: 3,
-  worldSize: 'mittel'
+  worldSize: 'mittel',
+  // Einstellungen-Submenue:
+  maxWind: 10,        // Wind-Range (-max..+max), 0 = kein Wind
+  startCredits: 0     // Anfangsgeld pro Tank
 };
 
 let cache = null;

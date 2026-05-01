@@ -7,6 +7,7 @@ import { WEAPONS, WEAPON_ORDER, canFire, consume as consumeWeapon } from '../ent
 import { generateWind, muzzleVelocity, setPhysicsScale } from '../physics/ballistics.js';
 import { checkProjectileImpact, applyBlast, settleTanks } from '../physics/collision.js';
 import { AiController, DIFFICULTY } from '../ai/ai.js';
+import { aiBuyWeapons, summarizePurchases } from '../ai/shop.js';
 import { SoundManager } from '../audio/sound.js';
 import { ParticleSystem } from '../rendering/particles.js';
 import { loadSettings, saveSettings } from './settings.js';
@@ -39,7 +40,9 @@ const DEFAULT_CONFIG = {
   numHumans: 1,                    // erster Slot ist Mensch, Rest KI
   aiDifficulty: DIFFICULTY.pro,    // 'beginner' | 'pro' | 'expert'
   bestOf: 3,
-  worldSize: 'mittel'              // klein | mittel | gross | riesig
+  worldSize: 'mittel',             // klein | mittel | gross | riesig (jetzt im Settings-Submenue)
+  maxWind: 10,                     // Wind-Range +/-
+  startCredits: 0                  // Anfangsgeld
 };
 const PLAYER_NAMES = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10'];
 // Credit-Skalierung (Stand v1.1): so dass ein durchschnittlicher Sieg in einer
@@ -94,10 +97,19 @@ export class Game {
       // Zoom-Slider (in-game)
       zoomSlider: document.getElementById('zoom-slider'),
       zoomLabel: document.getElementById('zoom-label'),
+      dpadAngle: document.getElementById('dpad-angle'),
+      dpadPower: document.getElementById('dpad-power'),
       // Pause
       pause: document.getElementById('screen-pause'),
       btnResume: document.getElementById('btn-resume'),
       btnPauseMenu: document.getElementById('btn-pause-menu'),
+      // Settings-Submenue
+      settings: document.getElementById('screen-settings'),
+      btnOpenSettings: document.getElementById('btn-open-settings'),
+      btnCloseSettings: document.getElementById('btn-close-settings'),
+      setMaxWind: document.getElementById('set-max-wind'),
+      setStartCredits: document.getElementById('set-start-credits'),
+      setWorldSizeSettings: document.getElementById('set-world-size'),
       // Sound-Toggles
       btnSound: document.getElementById('btn-sound'),
       btnMusic: document.getElementById('btn-music')
@@ -118,8 +130,15 @@ export class Game {
       numHumans: this.settings.numHumans,
       aiDifficulty: this.settings.aiDifficulty,
       bestOf: this.settings.bestOf,
-      worldSize: this.settings.worldSize ?? DEFAULT_CONFIG.worldSize
+      worldSize: this.settings.worldSize ?? DEFAULT_CONFIG.worldSize,
+      maxWind: this.settings.maxWind ?? DEFAULT_CONFIG.maxWind,
+      startCredits: this.settings.startCredits ?? DEFAULT_CONFIG.startCredits
     };
+
+    /** D-Pad-Aim-Input: -1/0/+1 je Achse (von touch.js gesetzt). */
+    this.aimInput = { angleDir: 0, powerDir: 0 };
+    /** Camera-Mode: false = Auto-Fit beim Schuss; true = bleibt im Zoom + folgt Projektil. */
+    this._followMode = false;
     this.state = null;
     this.stateTime = 0;
     /** Set, wenn der eigentliche Match-Zustand pausiert ist. */
@@ -202,11 +221,19 @@ export class Game {
     }
     this.el.setupNumPlayers?.addEventListener('change', () => this._refreshNumHumansOptions());
 
-    // Zoom-Slider verkabeln (in-game).
-    this.el.zoomSlider?.addEventListener('input', (e) => {
-      const z = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
-      this.renderer.setZoom(z);
-      if (this.el.zoomLabel) this.el.zoomLabel.textContent = `${z.toFixed(1)}×`;
+    // Settings-Submenue verkabeln.
+    if (this.el.setMaxWind) this.el.setMaxWind.value = String(this.config.maxWind);
+    if (this.el.setStartCredits) this.el.setStartCredits.value = String(this.config.startCredits);
+    if (this.el.setWorldSizeSettings) this.el.setWorldSizeSettings.value = this.config.worldSize;
+
+    this.el.btnOpenSettings?.addEventListener('click', () => {
+      this.sound.playClick();
+      this.el.settings?.classList.remove('hidden');
+    });
+    this.el.btnCloseSettings?.addEventListener('click', () => {
+      this.sound.playClick();
+      this._saveSettingsForm();
+      this.el.settings?.classList.add('hidden');
     });
 
     this._updateSoundButtons();
@@ -227,18 +254,30 @@ export class Game {
     const nh = parseInt(this.el.setupNumHumans?.value ?? '1', 10);
     const diff = this.el.setupDifficulty?.value ?? DIFFICULTY.pro;
     const bo = parseInt(this.el.setupBestOf?.value ?? '3', 10);
-    const ws = this.el.setupWorldSize?.value ?? 'mittel';
     this.config.numPlayers = clamp(np, 2, 10);
     this.config.numHumans = clamp(nh, 0, this.config.numPlayers);
     this.config.aiDifficulty = diff;
     this.config.bestOf = clamp(bo, 1, 9);
-    this.config.worldSize = CONFIG.world.presets[ws] ? ws : 'mittel';
     this.settings = saveSettings({
       numPlayers: this.config.numPlayers,
       numHumans: this.config.numHumans,
       aiDifficulty: this.config.aiDifficulty,
-      bestOf: this.config.bestOf,
-      worldSize: this.config.worldSize
+      bestOf: this.config.bestOf
+    });
+  }
+
+  /** Liest die Werte des Einstellungen-Subscreens und persistiert sie. */
+  _saveSettingsForm() {
+    const ws = this.el.setWorldSizeSettings?.value ?? 'mittel';
+    const mw = parseInt(this.el.setMaxWind?.value ?? '10', 10);
+    const sc = parseInt(this.el.setStartCredits?.value ?? '0', 10);
+    this.config.worldSize = CONFIG.world.presets[ws] ? ws : 'mittel';
+    this.config.maxWind = clamp(mw, 0, 20);
+    this.config.startCredits = clamp(sc, 0, 5000);
+    this.settings = saveSettings({
+      worldSize: this.config.worldSize,
+      maxWind: this.config.maxWind,
+      startCredits: this.config.startCredits
     });
   }
 
@@ -361,6 +400,8 @@ export class Game {
         isHuman
       });
       t.selectedWeapon = 'standard';
+      t.credits = this.config.startCredits;
+      t.lastShopPurchases = [];
       if (!isHuman) {
         t.ai = new AiController(t, this.config.aiDifficulty);
       }
@@ -393,6 +434,14 @@ export class Game {
         this._hideBanner();
         this._showOnly('hud');
         const t = this.tanks[this.activeIndex];
+        // Camera-Verhalten: im Follow-Mode smooth zum aktiven Spieler pannen
+        // (gleiche Zoomstufe). Sonst lassen wir den User-Zoom in Ruhe.
+        if (t && this._followMode) {
+          this.renderer.setCameraTarget(
+            { centerWorld: { x: t.x, y: t.y - 40 } },
+            5
+          );
+        }
         if (t && !t.isHuman && t.ai) t.ai.beginTurn(this);
         break;
       }
@@ -412,11 +461,21 @@ export class Game {
         this._setBannerButton(true, this._isMatchOver() ? 'Spielende' : 'Weiter');
         break;
       }
-      case S.SHOP:
-        this.shopActiveIdx = 0;
+      case S.SHOP: {
+        // KI-Tanks kaufen automatisch nach Schwierigkeit. Resultate werden
+        // im Shop angezeigt; Mensch sieht was die KI eingelagert hat.
+        for (const t of this.tanks) {
+          if (!t.isHuman && t.alive !== undefined) {
+            t.lastShopPurchases = aiBuyWeapons(t, this.config.aiDifficulty);
+          }
+        }
+        // Erster MENSCHLICHER Tab als initial aktiv (KI-Tabs sind read-only).
+        this.shopActiveIdx = this.tanks.findIndex((t) => t.isHuman);
+        if (this.shopActiveIdx < 0) this.shopActiveIdx = 0;
         this._populateShop();
         this._showOnly('shop');
         break;
+      }
       case S.GAME_OVER: {
         this._showOnly('gameover');
         const lines = this.tanks.map((t, i) => `${t.name}: ${this.scores[i] ?? 0}`).join(' · ');
@@ -506,8 +565,12 @@ export class Game {
     const fine = this.input.isDown('ShiftLeft') || this.input.isDown('ShiftRight');
     const angleSpeed = (fine ? 15 : 60) * dt;
     const powerSpeed = (fine ? 12 : 40) * dt;
+    // Tastatur-Input.
     if (this.input.isDown('ArrowLeft')) active.adjustAngle(angleSpeed);
     if (this.input.isDown('ArrowRight')) active.adjustAngle(-angleSpeed);
+    // D-Pad-Input (mit gleicher Geschwindigkeit, additiv falls beide gedrueckt).
+    if (this.aimInput?.angleDir) active.adjustAngle(this.aimInput.angleDir * angleSpeed);
+    if (this.aimInput?.powerDir) active.adjustPower(this.aimInput.powerDir * powerSpeed);
     if (this.input.isDown('ArrowUp')) active.adjustPower(powerSpeed);
     if (this.input.isDown('ArrowDown')) active.adjustPower(-powerSpeed);
 
@@ -566,6 +629,15 @@ export class Game {
       color: w.color || '#fbbf24',
       radius: wid === 'nuke' ? 5 : wid === 'roller' || wid === 'driller' ? 4 : 3
     });
+    // Trail-Recording fuer naechste Runde.
+    t.currentShotTrail = [{ x: tip.x, y: tip.y }];
+
+    // Camera-Verhalten: PC/Tablet rauszoomen zur Gesamtuebersicht; Mobile-
+    // Portrait bleibt im Zoom (verfolgt das Projektil).
+    if (!this._followMode) {
+      this.renderer.setCameraTarget({ zoom: 1 }, 6);
+    }
+
     this.sound.playShoot(wid);
     this.setState(S.PROJECTILE_FLYING);
   }
@@ -584,6 +656,14 @@ export class Game {
       this._stepProjectile(p, dt, bounds, /*isChild*/ true);
     }
     this.subProjectiles = this.subProjectiles.filter((p) => p.alive);
+
+    // Follow-Camera: Mobile-Portrait verfolgt das Hauptprojektil.
+    if (this._followMode && this.projectile) {
+      this.renderer.setCameraTarget(
+        { centerWorld: { x: this.projectile.x, y: this.projectile.y } },
+        8
+      );
+    }
   }
 
   _stepProjectile(p, dt, bounds, isChild) {
@@ -606,6 +686,19 @@ export class Game {
     }
 
     if (p.alive) {
+      // Trail-Aufzeichnung (nur Hauptgeschoss, sub-sample alle ~12 Welt-Pixel).
+      if (!isChild) {
+        const owner = this.tanks.find((t) => t.id === p.ownerId);
+        const trail = owner?.currentShotTrail;
+        if (trail) {
+          const last = trail[trail.length - 1];
+          if (!last || Math.hypot(p.x - last.x, p.y - last.y) >= 12) {
+            trail.push({ x: p.x, y: p.y });
+            // Begrenze Speicher (sehr lange Schuesse).
+            if (trail.length > 400) trail.shift();
+          }
+        }
+      }
       const impact = checkProjectileImpact(p, prevX, prevY, this.terrain, this.tanks);
       if (impact) this._handleImpact(p, impact);
     }
@@ -669,6 +762,13 @@ export class Game {
     // Lernen fuer "expert"-KI: dem Schuetzen den Treffer zurueckmelden.
     const shooter = this.tanks.find((t) => t.id === p.ownerId);
     if (shooter && shooter.ai) shooter.ai.recordImpact(impact.x, impact.y);
+
+    // Trail finalisieren — letzter Punkt = Detonations-Position; archiviere.
+    if (shooter && shooter.currentShotTrail) {
+      shooter.currentShotTrail.push({ x: impact.x, y: impact.y });
+      shooter.lastShotTrail = shooter.currentShotTrail;
+      shooter.currentShotTrail = null;
+    }
 
     this.sound.playExplosion(w.blastRadius);
     this.particles.explosion(impact.x, impact.y, w.blastRadius);
@@ -835,7 +935,7 @@ export class Game {
     }
 
     this.terrain = new Terrain(this.worldWidth, this.worldHeight, rng);
-    this.wind = generateWind(rng);
+    this.wind = generateWind(rng, this.config.maxWind);
     this.skyIndex = (this.roundIndex + Math.floor(rng() * 3)) % 3;
 
     // Persistente Tanks: Position + HP fuer neue Runde resetten, Inventory + Credits behalten.
@@ -849,10 +949,20 @@ export class Game {
       t.power = 50;
       t._lastTickAngle = undefined;
       t._lastTickPower = undefined;
+      // Trails zwischen Runden behalten waere stoerend — frisch starten.
+      t.lastShotTrail = null;
+      t.currentShotTrail = null;
       // Falls die ausgewaehlte Waffe nicht mehr verfuegbar -> auf Standard zurueck.
       if (!canFire(t, t.selectedWeapon)) t.selectedWeapon = 'standard';
       t.snapToTerrain(this.terrain);
     });
+
+    // Camera-Mode: Mobile-Portrait und kleine Displays bekommen Follow-Mode
+    // (Camera bleibt im Zoom, verfolgt Projektil + naechsten Spieler).
+    // Desktop/Tablet zoomen beim Schuss automatisch zur Gesamtuebersicht.
+    const isPortrait = this.renderer.viewportH > this.renderer.viewportW;
+    const isSmall = this.renderer.viewportW < 720;
+    this._followMode = isPortrait || isSmall;
 
     this.activeIndex = 0;
     this.projectile = null;
@@ -1010,29 +1120,43 @@ export class Game {
   _populateShop() {
     if (!this.el.shopGrid) return;
 
-    // Spieler-Tabs (welcher Tank kauft gerade)
+    // Spieler-Tabs: Mensch-Tanks anklickbar, KI-Tanks nur als Status-Pillen.
     if (this.el.shopPlayerTabs) {
       this.el.shopPlayerTabs.innerHTML = this.tanks
-        .map(
-          (t, i) => `
-          <button data-shop-tab="${i}"
-            class="shop-tab font-pixel text-[10px] px-3 py-2 rounded border transition
-              ${i === this.shopActiveIdx ? 'bg-tw-accent text-tw-bg border-tw-accent' : 'bg-tw-panel/60 text-white/80 border-white/10 hover:border-white/30'}"
-            style="${i === this.shopActiveIdx ? '' : `border-left:3px solid ${t.color}`}">
-            ${t.name} · ${t.credits}¢
-          </button>`
-        )
+        .map((t, i) => {
+          const isActive = i === this.shopActiveIdx;
+          if (t.isHuman) {
+            return `
+              <button data-shop-tab="${i}"
+                class="shop-tab font-pixel text-[10px] px-3 py-2 rounded border transition
+                  ${isActive ? 'bg-tw-accent text-tw-bg border-tw-accent' : 'bg-tw-panel/60 text-white/80 border-white/10 hover:border-white/30'}"
+                style="${isActive ? '' : `border-left:3px solid ${t.color}`}">
+                ${t.name} · ${t.credits}¢
+              </button>`;
+          }
+          // KI-Tab: read-only-Pille mit Einkaufsliste.
+          const summary = summarizePurchases(t.lastShopPurchases);
+          return `
+            <div class="font-pixel text-[10px] px-3 py-2 rounded border bg-tw-panel/40 text-white/60 border-white/5 flex flex-col gap-0.5"
+                 style="border-left:3px solid ${t.color}">
+              <span><span class="text-white">${t.name}</span> · ${t.credits}¢</span>
+              <span class="text-[8px] text-white/50">${summary}</span>
+            </div>`;
+        })
         .join('');
       this.el.shopPlayerTabs.querySelectorAll('button[data-shop-tab]').forEach((btn) => {
         btn.addEventListener('click', (e) => {
           const idx = parseInt(/** @type {HTMLElement} */ (e.currentTarget).dataset.shopTab || '0', 10);
-          this.shopActiveIdx = idx;
-          this._populateShop();
+          if (this.tanks[idx]?.isHuman) {
+            this.shopActiveIdx = idx;
+            this._populateShop();
+          }
         });
       });
     }
 
     const tank = this.tanks[this.shopActiveIdx];
+    if (!tank) return;
     if (this.el.shopHeader) {
       this.el.shopHeader.textContent = `${tank.name} · ${tank.credits} Credits`;
       this.el.shopHeader.style.color = tank.color;
@@ -1093,6 +1217,10 @@ export class Game {
       // Welt-Space ab hier: Terrain, Tanks, Projektile, Partikel.
       this.renderer.applyCamera();
       if (this.terrain) this.renderer.drawTerrain(this.terrain);
+      // Trails der vergangenen Schuesse — DEZENT, hinter Tanks.
+      for (const t of this.tanks) {
+        this.renderer.drawShotTrail(t.lastShotTrail, t.color);
+      }
       for (let i = 0; i < this.tanks.length; i++) {
         const showActive = i === this.activeIndex && this.state === S.PLAYER_TURN;
         this.renderer.drawTank(this.tanks[i], showActive, now);
@@ -1142,6 +1270,9 @@ export class Game {
           this.el.hudWeaponMobile.textContent = wTextShort;
           this.el.hudWeaponMobile.style.color = w.color || '#fff';
         }
+        // D-Pad-Anzeige (Winkel/Power neben den Pfeil-Buttons).
+        if (this.el.dpadAngle) this.el.dpadAngle.textContent = angleStr;
+        if (this.el.dpadPower) this.el.dpadPower.textContent = powerStr;
       }
 
       // Live HP-Bars + credits — Desktop.

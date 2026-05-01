@@ -58,13 +58,15 @@ body,
   pointer-events: auto;
 }
 
-/* Default: Desktop-HUD sichtbar, Mobile-HUD aus. */
+/* Vereinheitlichtes HUD: das kompakte Top-Layout wird auf allen Plattformen
+   verwendet (vorher Mobile-only); das alte 3-Panel-Bottom-HUD ist entfallen,
+   weil die in-game Buttons/D-Pad unten denselben Platz brauchen. */
 .hud-mobile-only {
-  display: none;
+  display: block;
 }
 
 .hud-desktop-only {
-  display: flex;
+  display: none !important;
 }
 
 /* Touch-Modus: Tastatur-Hinweise aus. */
@@ -72,23 +74,17 @@ body.has-touch .desktop-only {
   display: none !important;
 }
 
-/* Touch-Controls nur waehrend des Spiels (PLAYER_TURN/PROJECTILE_FLYING).
-   Game setzt body.in-game, wenn das HUD-Screen aktiv ist.
-   safe-area-inset-bottom verhindert, dass FEUER/Waffe-Buttons hinter
-   der iOS-Home-Indicator-Leiste oder der Android-Gesten-Leiste verschwinden. */
+/* In-Game-Controls (D-Pad + FEUER + Waffe) sind auf ALLEN Plattformen sichtbar.
+   safe-area-inset-bottom verhindert, dass die Buttons hinter der iOS-Home-
+   Indicator-Leiste oder der Android-Gesten-Leiste verschwinden. */
 #touch-controls {
   display: none;
   padding-bottom: max(8px, env(safe-area-inset-bottom));
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
 }
-body.has-touch.in-game #touch-controls {
+body.in-game #touch-controls {
   display: block;
-}
-@media (max-width: 720px) {
-  body.in-game #touch-controls {
-    display: block;
-  }
 }
 
 /* Mobile-Banner / Pause / Game-Over Modals: Padding ausserhalb der safe-area */

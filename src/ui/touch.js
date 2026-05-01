@@ -1,21 +1,22 @@
 /**
- * Mobile-Touch-Steuerung — direkte Canvas-Manipulation statt Joystick.
+ * Eingabe-Bindings (Touch + Maus) — Aim, Pan, Zoom.
  *
- * Konzept:
- *  - 1 Finger auf Canvas: Drag setzt Winkel + Stärke des aktiven Panzers
- *    (Vektor vom Tank zum Finger in WELT-Koordinaten = Zielrichtung,
- *    Distanz = Stärke).
- *  - 2 Finger: Pan der Karte (Mittelpunkt-Delta -> Camera-Pan).
- *  - Loslassen: nichts. Es gibt einen dedizierten FEUER-Button.
+ * Aim:    D-Pad-Buttons unten links (Tap oder Press-and-Hold)
+ * Pan:    1) Mobile: 2-Finger-Drag auf Canvas
+ *         2) PC: Rechtsklick + Maus-Drag auf Canvas
+ * Zoom:   1) Mobile: Pinch (2-Finger-Spreizung) auf Canvas
+ *         2) PC: Mausrad
  *
- * Touch-Coords werden via renderer.screenToWorld in Welt-Koords umgerechnet,
- * damit Aim auch mit aktivem Zoom + Pan funktioniert.
+ * Aim-Input wird in game.aimInput akkumuliert; das Game wendet das pro Frame
+ * im _updatePlayerTurn an (gleicher Pfad wie Keyboard).
  *
  * @param {import('../core/game.js').Game} game
  */
 export function initTouchControls(game) {
   detectTouch();
-  bindCanvasAim(game);
+  bindCanvasGestures(game);
+  bindMouseGestures(game);
+  bindAimButtons(game);
   bindButtons(game);
 }
 
@@ -31,90 +32,32 @@ function detectTouch() {
   window.addEventListener('touchstart', enable, { once: true, capture: true, passive: true });
 }
 
-const POWER_REACH_PX = 220; // Welt-Pixel fuer Power=100
+// -- Canvas-Gesten (Touch) --------------------------------------------------
 
-function bindCanvasAim(game) {
+function bindCanvasGestures(game) {
   const canvas = document.getElementById('game-canvas');
   if (!canvas) return;
 
-  let mode = 'idle'; // 'idle' | 'aim' | 'pan'
-  let aimTouchId = null;
-  let panLastMid = null;
-  let panTouchIds = null;
+  let twoFingerActive = false;
+  let lastDist = 0;
+  let lastMid = null;
 
-  const screenToWorld = (clientX, clientY) => {
-    const rect = canvas.getBoundingClientRect();
-    return game.renderer.screenToWorld(clientX - rect.left, clientY - rect.top);
-  };
-
-  const applyAim = (touch) => {
-    if (game.state !== 'PLAYER_TURN' || game.paused) return;
-    const t = game.tanks[game.activeIndex];
-    if (!t || !t.alive || !t.isHuman) return;
-
-    const w = screenToWorld(touch.clientX, touch.clientY);
-    const cx = t.x;
-    const cy = t.y - 16;
-    const dx = w.x - cx;
-    const dy = w.y - cy;
-
-    let deg = (Math.atan2(-dy, dx) * 180) / Math.PI;
-    if (deg < 0) deg += 360;
-    if (deg > 180) deg = deg > 270 ? 0 : 180;
-    deg = clamp(deg, 5, 175);
-    t.turretAngle = deg;
-
-    const dist = Math.hypot(dx, dy);
-    t.power = clamp(Math.round((dist / POWER_REACH_PX) * 100), 0, 100);
-  };
-
-  const updatePan = (touches) => {
-    // Mid-Punkt zwischen den zwei verfolgten Fingern.
-    let a = null, b = null;
-    for (let i = 0; i < touches.length; i++) {
-      if (touches[i].identifier === panTouchIds[0]) a = touches[i];
-      if (touches[i].identifier === panTouchIds[1]) b = touches[i];
-    }
-    if (!a || !b) return;
-    const rect = canvas.getBoundingClientRect();
-    const midX = (a.clientX + b.clientX) / 2 - rect.left;
-    const midY = (a.clientY + b.clientY) / 2 - rect.top;
-    if (panLastMid) {
-      // Pan in Welt-Pixeln = Screen-Delta / Scale (umgekehrt zum Mid-Movement).
-      const scale = game.renderer._scale();
-      const dx = (panLastMid.x - midX) / scale;
-      const dy = (panLastMid.y - midY) / scale;
-      game.renderer.pan(dx, dy);
-    }
-    panLastMid = { x: midX, y: midY };
-  };
+  const computeMid = (touches) => ({
+    x: (touches[0].clientX + touches[1].clientX) / 2,
+    y: (touches[0].clientY + touches[1].clientY) / 2
+  });
+  const computeDist = (touches) =>
+    Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
 
   canvas.addEventListener(
     'touchstart',
     (e) => {
-      // Mehr als 1 Finger -> Pan-Modus
       if (e.touches.length >= 2) {
         e.preventDefault();
-        if (mode === 'aim') {
-          mode = 'idle';
-          aimTouchId = null;
-        }
-        mode = 'pan';
-        panTouchIds = [e.touches[0].identifier, e.touches[1].identifier];
-        panLastMid = null;
-        updatePan(e.touches);
-        return;
+        twoFingerActive = true;
+        lastDist = computeDist(e.touches);
+        lastMid = computeMid(e.touches);
       }
-      // 1 Finger -> Aim
-      if (game.state !== 'PLAYER_TURN') return;
-      const t = game.tanks[game.activeIndex];
-      if (!t || !t.isHuman || !t.alive) return;
-      const touch = e.changedTouches[0];
-      if (!touch) return;
-      e.preventDefault();
-      mode = 'aim';
-      aimTouchId = touch.identifier;
-      applyAim(touch);
     },
     { passive: false }
   );
@@ -122,41 +65,129 @@ function bindCanvasAim(game) {
   canvas.addEventListener(
     'touchmove',
     (e) => {
-      if (mode === 'pan') {
-        e.preventDefault();
-        updatePan(e.touches);
-        return;
+      if (!twoFingerActive || e.touches.length < 2) return;
+      e.preventDefault();
+      const dist = computeDist(e.touches);
+      const mid = computeMid(e.touches);
+      const rect = canvas.getBoundingClientRect();
+
+      // Zoom durch Distanz-Aenderung (Pinch): zoom-Factor = neueDist/alteDist.
+      if (lastDist > 10 && dist > 10) {
+        const factor = dist / lastDist;
+        const newZoom = game.renderer.camera.zoom * factor;
+        const anchor = game.renderer.screenToWorld(mid.x - rect.left, mid.y - rect.top);
+        game.renderer.setZoom(newZoom, anchor);
       }
-      if (mode === 'aim') {
-        e.preventDefault();
-        const touch = findTouch(e.changedTouches, aimTouchId);
-        if (touch) applyAim(touch);
+      // Pan durch Mid-Punkt-Verschiebung.
+      if (lastMid) {
+        const scale = game.renderer._scale();
+        const dx = (lastMid.x - mid.x) / scale;
+        const dy = (lastMid.y - mid.y) / scale;
+        game.renderer.pan(dx, dy);
       }
+      lastDist = dist;
+      lastMid = mid;
     },
     { passive: false }
   );
 
-  const endTouch = (e) => {
-    if (mode === 'pan') {
-      // Wenn nur noch 0 oder 1 Finger uebrig: Pan beenden.
-      if (e.touches.length < 2) {
-        mode = 'idle';
-        panTouchIds = null;
-        panLastMid = null;
-      }
-      return;
-    }
-    if (mode === 'aim') {
-      const ended = findTouch(e.changedTouches, aimTouchId);
-      if (ended) {
-        mode = 'idle';
-        aimTouchId = null;
-      }
+  const end = (e) => {
+    if (e.touches.length < 2) {
+      twoFingerActive = false;
+      lastMid = null;
     }
   };
-  canvas.addEventListener('touchend', endTouch);
-  canvas.addEventListener('touchcancel', endTouch);
+  canvas.addEventListener('touchend', end);
+  canvas.addEventListener('touchcancel', end);
 }
+
+// -- Maus-Gesten (PC) -------------------------------------------------------
+
+function bindMouseGestures(game) {
+  const canvas = document.getElementById('game-canvas');
+  if (!canvas) return;
+
+  // Rechtsklick + Drag = Pan. Kontextmenue unterdruecken.
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  let panning = false;
+  let lastX = 0;
+  let lastY = 0;
+
+  canvas.addEventListener('mousedown', (e) => {
+    if (e.button !== 2) return; // nur rechte Maustaste
+    panning = true;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!panning) return;
+    const scale = game.renderer._scale();
+    const dx = (lastX - e.clientX) / scale;
+    const dy = (lastY - e.clientY) / scale;
+    game.renderer.pan(dx, dy);
+    lastX = e.clientX;
+    lastY = e.clientY;
+  });
+  window.addEventListener('mouseup', (e) => {
+    if (e.button === 2) panning = false;
+  });
+
+  // Mausrad: Zoom anchored um Maus-Position.
+  canvas.addEventListener(
+    'wheel',
+    (e) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const anchor = game.renderer.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+      // deltaY: positiv = scroll runter = rauszoomen.
+      const factor = Math.pow(0.999, e.deltaY); // weiches Step-Verhalten
+      game.renderer.setZoom(game.renderer.camera.zoom * factor, anchor);
+    },
+    { passive: false }
+  );
+}
+
+// -- D-Pad-Aim-Buttons -----------------------------------------------------
+
+function bindAimButtons(game) {
+  const dpad = document.getElementById('dpad');
+  if (!dpad) return;
+  if (!game.aimInput) game.aimInput = { angleDir: 0, powerDir: 0 };
+
+  /** @type {Record<string, [keyof typeof game.aimInput, number]>} */
+  const apply = {
+    'angle-left':  ['angleDir', +1], // Pfeiltaste links erhoeht angle (turret nach links)
+    'angle-right': ['angleDir', -1],
+    'power-up':    ['powerDir', +1],
+    'power-down':  ['powerDir', -1]
+  };
+
+  dpad.querySelectorAll('button[data-aim]').forEach((btn) => {
+    const action = btn.getAttribute('data-aim');
+    const cfg = apply[action];
+    if (!cfg) return;
+    const [key, value] = cfg;
+
+    const press = (e) => {
+      e.preventDefault();
+      try { btn.setPointerCapture?.(e.pointerId); } catch (_) {}
+      game.aimInput[key] = value;
+    };
+    const release = () => {
+      if (game.aimInput[key] === value) game.aimInput[key] = 0;
+    };
+
+    btn.addEventListener('pointerdown', press);
+    btn.addEventListener('pointerup', release);
+    btn.addEventListener('pointercancel', release);
+    btn.addEventListener('pointerleave', release);
+    btn.addEventListener('lostpointercapture', release);
+  });
+}
+
+// -- FEUER + Waffe-Buttons --------------------------------------------------
 
 function bindButtons(game) {
   const fire = document.getElementById('touch-fire');
@@ -174,15 +205,4 @@ function bindButtons(game) {
     const t = game.tanks[game.activeIndex];
     if (t && t.isHuman) game._cycleWeapon(t, +1);
   });
-}
-
-function findTouch(list, id) {
-  for (let i = 0; i < list.length; i++) {
-    if (list[i].identifier === id) return list[i];
-  }
-  return null;
-}
-
-function clamp(v, lo, hi) {
-  return Math.max(lo, Math.min(hi, v));
 }

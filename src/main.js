@@ -51,15 +51,6 @@ app.innerHTML = `
           <option value="7">Best of 7</option>
         </select>
       </label>
-      <label class="flex flex-col gap-1 col-span-2">
-        <span class="text-white/70">Welt-Größe</span>
-        <select id="setup-world-size" class="bg-tw-panel border border-white/20 rounded px-2 py-2 text-white">
-          <option value="klein">Klein (1280)</option>
-          <option value="mittel" selected>Mittel (2000)</option>
-          <option value="gross">Groß (3000)</option>
-          <option value="riesig">Riesig (4200)</option>
-        </select>
-      </label>
     </div>
 
     <button id="btn-start"
@@ -67,7 +58,7 @@ app.innerHTML = `
       Neues Spiel
     </button>
 
-    <div class="flex gap-2">
+    <div class="flex gap-2 flex-wrap justify-center">
       <button id="btn-sound"
         class="font-pixel text-[10px] bg-tw-panel/80 hover:bg-tw-panel text-white px-3 py-2 rounded border border-white/10">
         Sound ◉
@@ -75,6 +66,10 @@ app.innerHTML = `
       <button id="btn-music"
         class="font-pixel text-[10px] bg-tw-panel/80 hover:bg-tw-panel text-white px-3 py-2 rounded border border-white/10">
         Musik ○
+      </button>
+      <button id="btn-open-settings"
+        class="font-pixel text-[10px] bg-tw-panel/80 hover:bg-tw-panel text-white px-3 py-2 rounded border border-white/10">
+        Einstellungen
       </button>
     </div>
 
@@ -157,15 +152,25 @@ app.innerHTML = `
 
   <div id="touch-controls" class="hidden absolute inset-x-0 bottom-0 pointer-events-none z-10">
     <div class="flex justify-between items-end p-3 gap-2">
-      <div class="flex flex-col gap-2 pointer-events-auto bg-tw-panel/85 border border-white/10 rounded px-2 py-2 max-w-[40%]">
-        <div class="font-pixel text-[8px] text-white/70 flex items-center justify-between gap-2">
-          <span>Zoom</span>
-          <span id="zoom-label" class="text-tw-accent">1.0×</span>
+      <div class="pointer-events-auto bg-tw-panel/85 border border-white/10 rounded p-2 flex items-center gap-2">
+        <div id="dpad" class="grid gap-1"
+             style="grid-template-areas: '. up .' 'left center right' '. down .'; grid-template-columns: 38px 38px 38px; grid-template-rows: 38px 38px 38px;">
+          <button data-aim="power-up" style="grid-area: up;"
+            class="font-pixel text-lg bg-tw-bg/90 border border-white/20 rounded text-white active:bg-tw-accent active:text-tw-bg select-none">↑</button>
+          <button data-aim="angle-left" style="grid-area: left;"
+            class="font-pixel text-lg bg-tw-bg/90 border border-white/20 rounded text-white active:bg-tw-accent active:text-tw-bg select-none">←</button>
+          <div style="grid-area: center;"
+               class="font-pixel text-[7px] text-white/40 flex items-center justify-center select-none">AIM</div>
+          <button data-aim="angle-right" style="grid-area: right;"
+            class="font-pixel text-lg bg-tw-bg/90 border border-white/20 rounded text-white active:bg-tw-accent active:text-tw-bg select-none">→</button>
+          <button data-aim="power-down" style="grid-area: down;"
+            class="font-pixel text-lg bg-tw-bg/90 border border-white/20 rounded text-white active:bg-tw-accent active:text-tw-bg select-none">↓</button>
         </div>
-        <input id="zoom-slider" type="range" min="1" max="4" step="0.1" value="1"
-          class="w-full accent-tw-accent" style="touch-action:manipulation" />
-        <div id="touch-hint" class="font-pixel text-[8px] text-white/60 leading-tight transition-opacity duration-700">
-          Tippen + ziehen aufs Feld zum Zielen.<br>2 Finger zum Verschieben.
+        <div class="font-pixel flex flex-col gap-1 text-[10px] min-w-[44px]">
+          <span class="text-white/60">Winkel</span>
+          <span id="dpad-angle" class="text-tw-accent">90°</span>
+          <span class="text-white/60 mt-1">Stärke</span>
+          <span id="dpad-power" class="text-emerald-400">50</span>
         </div>
       </div>
       <div class="flex items-end gap-2 pointer-events-auto">
@@ -176,6 +181,48 @@ app.innerHTML = `
         <button id="touch-fire"
           class="font-pixel text-sm bg-tw-accent text-tw-bg px-7 py-5 rounded-full shadow-lg active:bg-yellow-300 active:scale-95 transition">
           FEUER
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-settings" class="screen hidden flex items-center justify-center bg-black/70 z-20">
+    <div class="bg-tw-panel border border-white/20 rounded-lg p-5 max-w-md w-[92%] flex flex-col gap-4">
+      <div class="font-pixel text-xl text-tw-accent">Einstellungen</div>
+      <div class="grid grid-cols-1 gap-3 font-pixel text-[10px]">
+        <label class="flex flex-col gap-1">
+          <span class="text-white/70">Welt-Größe</span>
+          <select id="set-world-size" class="bg-tw-bg border border-white/20 rounded px-2 py-2 text-white">
+            <option value="klein">Klein (1280)</option>
+            <option value="mittel" selected>Mittel (2000)</option>
+            <option value="gross">Groß (3000)</option>
+            <option value="riesig">Riesig (4200)</option>
+          </select>
+        </label>
+        <label class="flex flex-col gap-1">
+          <span class="text-white/70">Wind-Range</span>
+          <select id="set-max-wind" class="bg-tw-bg border border-white/20 rounded px-2 py-2 text-white">
+            <option value="0">Windstill</option>
+            <option value="5">Mild (±5)</option>
+            <option value="10" selected>Normal (±10)</option>
+            <option value="15">Stürmisch (±15)</option>
+          </select>
+        </label>
+        <label class="flex flex-col gap-1">
+          <span class="text-white/70">Anfangsgeld pro Tank</span>
+          <select id="set-start-credits" class="bg-tw-bg border border-white/20 rounded px-2 py-2 text-white">
+            <option value="0" selected>0 ¢</option>
+            <option value="500">500 ¢</option>
+            <option value="1000">1000 ¢</option>
+            <option value="2000">2000 ¢</option>
+            <option value="5000">5000 ¢</option>
+          </select>
+        </label>
+      </div>
+      <div class="flex justify-end">
+        <button id="btn-close-settings"
+          class="font-pixel text-sm bg-tw-accent text-tw-bg px-6 py-3 rounded hover:bg-yellow-300 transition">
+          OK
         </button>
       </div>
     </div>

@@ -38,10 +38,12 @@ export function windToAcceleration(wind) {
 /**
  * Generiert eine zufaellige Wind-Staerke pro Runde.
  * @param {() => number} rng
- * @returns {number} -10..+10 (mit 1 Nachkommastelle)
+ * @param {number} [max=10] Maximale absolute Wind-Staerke; 0 = kein Wind.
+ * @returns {number} -max..+max (mit 1 Nachkommastelle)
  */
-export function generateWind(rng) {
-  return Math.round((rng() * 20 - 10) * 10) / 10;
+export function generateWind(rng, max = 10) {
+  if (max <= 0) return 0;
+  return Math.round((rng() * 2 * max - max) * 10) / 10;
 }
 
 /**

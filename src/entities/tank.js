@@ -8,7 +8,7 @@
 const ANGLE_MIN = 0;
 const ANGLE_MAX = 180;
 const POWER_MIN = 0;
-const POWER_MAX = 100;
+const POWER_MAX = 1000;
 
 export const TANK_BODY_WIDTH = 32;
 export const TANK_BODY_HEIGHT = 12;
@@ -33,7 +33,7 @@ export class Tank {
     this.maxHp = 100;
     this.credits = 0;
     this.turretAngle = 90;     // Grad — startet senkrecht nach oben
-    this.power = 50;            // 0..100
+    this.power = 500;           // 0..1000 (Tank-Wars-3.2-Range, halbe Power als Default)
     this.isHuman = isHuman;
     this.alive = true;
     /** @type {Map<string, number>} weaponId -> Anzahl */

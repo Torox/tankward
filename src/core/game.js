@@ -565,7 +565,9 @@ export class Game {
 
     const fine = this.input.isDown('ShiftLeft') || this.input.isDown('ShiftRight');
     const angleSpeed = (fine ? 15 : 60) * dt;
-    const powerSpeed = (fine ? 12 : 40) * dt;
+    // Power-Range 0..1000 -> Speed × 10 ggn. der alten 0..100-Range, sonst dauert
+    // 0->1000 25 Sekunden Halten (statt der alten 2.5 s fuer 0->100).
+    const powerSpeed = (fine ? 120 : 400) * dt;
     // Tastatur-Input.
     if (this.input.isDown('ArrowLeft')) active.adjustAngle(angleSpeed);
     if (this.input.isDown('ArrowRight')) active.adjustAngle(-angleSpeed);
@@ -1051,7 +1053,7 @@ export class Game {
       t.hp = t.maxHp;
       t.alive = true;
       t.turretAngle = 90;
-      t.power = 50;
+      t.power = 500;
       t._lastTickAngle = undefined;
       t._lastTickPower = undefined;
       // Trails zwischen Runden behalten waere stoerend — frisch starten.

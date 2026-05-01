@@ -15,7 +15,8 @@ export const DIFFICULTY = Object.freeze({
 });
 
 const AIM_SPEED_DEG_PER_S = 90;
-const POWER_SPEED_PER_S = 70;
+// Power-Range 0..1000 (Tank-Wars-3.2-Style); Speed entsprechend skaliert.
+const POWER_SPEED_PER_S = 700;
 const POST_FIRE_DELAY = 0.0; // wir verlassen aimen sofort wenn Ziel erreicht
 
 export class AiController {
@@ -27,7 +28,7 @@ export class AiController {
     this.tank = tank;
     this.difficulty = difficulty;
     this.state = 'idle';
-    this.aim = { angle: 90, power: 50 };
+    this.aim = { angle: 90, power: 500 };
     this.targetTank = null;
     /** Letzter Schuss-Errorvektor (target - hit) zum Lernen (nur expert). */
     this.lastError = null;
@@ -66,11 +67,11 @@ export class AiController {
       const step = Math.sign(dA) * Math.min(Math.abs(dA), AIM_SPEED_DEG_PER_S * dt);
       t.adjustAngle(step);
     }
-    if (Math.abs(dP) > 0.4) {
+    if (Math.abs(dP) > 4) {
       const step = Math.sign(dP) * Math.min(Math.abs(dP), POWER_SPEED_PER_S * dt);
       t.adjustPower(step);
     }
-    if (Math.abs(dA) < 0.4 && Math.abs(dP) < 0.4) {
+    if (Math.abs(dA) < 0.4 && Math.abs(dP) < 4) {
       this.state = 'firing';
       fire();
     }
@@ -121,7 +122,7 @@ export class AiController {
     const aimRight = dx >= 0;
 
     // Zwei Iterationen: grobes Raster -> feines Raster um den Bestwert.
-    let best = { angle: 90, power: 60, miss: Infinity };
+    let best = { angle: 90, power: 600, miss: Infinity };
     const evaluate = (a, p) => {
       const miss = this._simulate(a, p, game);
       if (miss < best.miss) best = { angle: a, power: p, miss };
@@ -129,14 +130,15 @@ export class AiController {
 
     const angleStart = aimRight ? 10 : 95;
     const angleEnd = aimRight ? 85 : 170;
+    // Grobes Raster: 4° in angle, 80 Power-Stufen (0..1000-Range).
     for (let a = angleStart; a <= angleEnd; a += 4) {
-      for (let p = 30; p <= 100; p += 8) evaluate(a, p);
+      for (let p = 300; p <= 1000; p += 80) evaluate(a, p);
     }
-    // Feinsuche +/- 6° und +/- 6 Stufen Power um best.
+    // Feinsuche +/- 6° und +/- 60 Stufen Power um best.
     for (let a = best.angle - 6; a <= best.angle + 6; a += 1) {
       if (a < 5 || a > 175) continue;
-      for (let p = best.power - 6; p <= best.power + 6; p += 2) {
-        if (p < 10 || p > 100) continue;
+      for (let p = best.power - 60; p <= best.power + 60; p += 20) {
+        if (p < 100 || p > 1000) continue;
         evaluate(a, p);
       }
     }
@@ -148,24 +150,24 @@ export class AiController {
     let dP = 0;
     if (this.difficulty === DIFFICULTY.beginner) {
       dA = (Math.random() - 0.5) * 60; // ±30°
-      dP = (Math.random() - 0.5) * 30;
+      dP = (Math.random() - 0.5) * 300; // ±150 Power
     } else if (this.difficulty === DIFFICULTY.pro) {
       dA = (Math.random() - 0.5) * 10; // ±5°
-      dP = (Math.random() - 0.5) * 6;
+      dP = (Math.random() - 0.5) * 60;
     } else {
       // expert
       dA = (Math.random() - 0.5) * 3;
-      dP = (Math.random() - 0.5) * 2;
+      dP = (Math.random() - 0.5) * 20;
       // Lernen: kleine Korrektur basierend auf letztem Fehler
       if (this.lastError) {
         // Wenn dx > 0 (Treffer war zu weit links -> Ziel rechts), Power leicht erhoehen.
-        const corr = Math.sign(this.lastError.dx) * Math.min(8, Math.abs(this.lastError.dx) * 0.04);
+        const corr = Math.sign(this.lastError.dx) * Math.min(80, Math.abs(this.lastError.dx) * 0.4);
         dP += corr;
       }
     }
     return {
       angle: clamp(sol.angle + dA, 5, 175),
-      power: clamp(sol.power + dP, 10, 100)
+      power: clamp(sol.power + dP, 100, 1000)
     };
   }
 

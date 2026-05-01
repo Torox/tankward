@@ -19,11 +19,15 @@ export function getPhysicsScale() {
 }
 
 /**
- * Konvertiert die Spieler-Staerke (0..100) in eine Anfangsgeschwindigkeit (px/s).
+ * Konvertiert die Spieler-Staerke (0..1000) in eine Anfangsgeschwindigkeit (px/s).
  * Skaliert mit der Welt-Groesse.
+ *
+ * Power 1000 -> ~1500 px/s — bei dieser Geschwindigkeit ist die Flugbahn
+ * spuerbar flacher als bei mittlerer Power (gravity hat weniger Zeit zu wirken).
+ * Niedrige Power (200-400) bleibt stark ballistisch / lobby.
  */
 export function powerToVelocity(power) {
-  return power * 9 * _velocityScale;
+  return power * 1.5 * _velocityScale;
 }
 
 /**

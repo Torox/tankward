@@ -179,6 +179,66 @@ export const WEAPONS = {
     icon: '≈',
     desc: 'Kollabiert instabiles Terrain weltweit.'
   },
+  'cri-small': {
+    id: 'cri-small',
+    name: 'CRI klein',
+    price: 900,
+    blastRadius: 0,
+    damage: 0,
+    mass: 4,
+    caseHardness: 0.2,
+    chainReact: {
+      initialRadius: 22,
+      hops: 6,
+      falloff: 0.85,
+      spreadX: 160,
+      spreadY: 60,
+      jitterDelay: 0.04
+    },
+    color: '#a78bfa',
+    icon: '⌬',
+    desc: 'Kettenreaktion — kleine Streuung.'
+  },
+  'cri-medium': {
+    id: 'cri-medium',
+    name: 'CRI mittel',
+    price: 1700,
+    blastRadius: 0,
+    damage: 0,
+    mass: 5,
+    caseHardness: 0.2,
+    chainReact: {
+      initialRadius: 28,
+      hops: 10,
+      falloff: 0.85,
+      spreadX: 220,
+      spreadY: 80,
+      jitterDelay: 0.05
+    },
+    color: '#8b5cf6',
+    icon: '⌬',
+    desc: 'Mittlere Kettenreaktion.'
+  },
+  'cri-large': {
+    id: 'cri-large',
+    name: 'CRI groß',
+    price: 2800,
+    blastRadius: 0,
+    damage: 0,
+    mass: 6,
+    caseHardness: 0.2,
+    chainReact: {
+      initialRadius: 34,
+      hops: 16,
+      falloff: 0.88,
+      spreadX: 300,
+      spreadY: 110,
+      jitterDelay: 0.06
+    },
+    color: '#6d28d9',
+    icon: '⌬',
+    desc: 'Großflächige Kettenreaktion.'
+  },
   nuke: {
     id: 'nuke',
     name: 'Atombombe',
@@ -207,6 +267,9 @@ export const WEAPON_ORDER = [
   'dirt-large',
   'dirt-explosive',
   'sonic',
+  'cri-small',
+  'cri-medium',
+  'cri-large',
   'nuke'
 ];
 

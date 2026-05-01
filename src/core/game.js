@@ -3,6 +3,7 @@ import { Terrain } from '../entities/terrain.js';
 import { Tank, TANK_COLORS, pickSpawnPositions } from '../entities/tank.js';
 import { Projectile } from '../entities/projectile.js';
 import { FireBlob } from '../entities/fire-blob.js';
+import { ChainHop } from '../entities/chain-hop.js';
 import { WEAPONS, WEAPON_ORDER, canFire, consume as consumeWeapon } from '../entities/weapons.js';
 import { generateWind, muzzleVelocity, setPhysicsScale, GRAVITY } from '../physics/ballistics.js';
 import { checkProjectileImpact, applyBlast, settleTanks } from '../physics/collision.js';
@@ -1025,6 +1026,9 @@ export class Game {
     if (w.sonicWave) {
       this._sonicSweep(w.sonicWave);
       // Skip carve — sonic deals no terrain damage at impact, only collapses.
+    } else if (w.chainReact) {
+      this._scheduleChain(impact, w.chainReact);
+      // Skip default carve — _scheduleChain hat den initialen Carve schon erledigt.
     } else {
       this.terrain.carve(impact.x, impact.y, w.blastRadius);
       // Phase 2.1: Crumble-Effekt nach Krater. Bei 100 % immer geglaettet,
@@ -1113,6 +1117,30 @@ export class Game {
     // Visueller Effekt
     this.particles.explosion(this.worldWidth / 2, this.worldHeight * 0.4, 60);
     this.renderer.triggerShake(4, 0.3);
+  }
+
+  _scheduleChain(impact, cfg) {
+    // Initial Detonation am Aufprall.
+    this.terrain.carve(impact.x, impact.y, cfg.initialRadius);
+    this.terrain.smoothCrater(impact.x, cfg.initialRadius, this.config.crumblePercent ?? 75);
+    this.particles.explosion(impact.x, impact.y, cfg.initialRadius);
+    this.sound.playExplosion(cfg.initialRadius);
+
+    // Chain-Hops queue
+    let r = cfg.initialRadius;
+    let prevX = impact.x;
+    for (let i = 0; i < cfg.hops; i++) {
+      r *= cfg.falloff;
+      if (r < 6) break;
+      const ox = (Math.random() - 0.5) * cfg.spreadX;
+      const cx = clamp(prevX + ox, 10, this.worldWidth - 10);
+      const cy = this.terrain.surfaceY(cx);
+      this.effects.push(new ChainHop({
+        x: cx, y: cy, radius: r,
+        delay: (i + 1) * cfg.jitterDelay
+      }));
+      prevX = cx;
+    }
   }
 
   /**
@@ -1260,6 +1288,14 @@ export class Game {
       const hits = e.update(dt, this.tanks);
       if (hits.length) {
         // Napalm-Schaden ist anonym — niemand bekommt Credits dafuer (Designentscheidung).
+      }
+      // ChainHop: einmal triggert, fuehrt Carve aus
+      if (e instanceof ChainHop && e.fired && e.alive) {
+        this.terrain.carve(e.x, e.y, e.radius);
+        this.terrain.smoothCrater(e.x, e.radius, this.config.crumblePercent ?? 75);
+        this.particles.explosion(e.x, e.y, e.radius);
+        this.sound.playExplosion(e.radius);
+        e.alive = false;
       }
     }
     this.effects = this.effects.filter((e) => e.alive);

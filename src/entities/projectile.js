@@ -71,8 +71,9 @@ export class Projectile {
     this.trail.push({ x: this.x, y: this.y });
     if (this.trail.length > TRAIL_MAX) this.trail.shift();
 
-    // Off-Screen (links/rechts/unten) -> tot.
-    if (this.x < -50 || this.x > bounds.width + 50 || this.y > bounds.height + 50) {
+    // Unten = immer tot (kein Boden-Bounce). Links/rechts wird in
+    // game._applyWallMode behandelt (Phase 2.2).
+    if (this.y > bounds.height + 50) {
       this.alive = false;
     }
   }

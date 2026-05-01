@@ -717,6 +717,9 @@ export class Game {
     const prevY = p.y;
     p.update(dt, this.wind, bounds);
 
+    // Phase 2.2: Wall-Mode anwenden (off/wrap/sticky/elastic).
+    this._applyWallMode(p, bounds);
+
     // Apex-Split (Streubombe/MIRV) — nur bei Hauptgeschoss, nicht bei Kindern.
     if (!isChild) {
       const w = WEAPONS[p.weaponId];
@@ -945,6 +948,43 @@ export class Game {
     if (w.napalm) this._spawnNapalm(impact, w.napalm);
   }
 
+  /**
+   * Phase 2.2: Wall-Mode an Spielfeld-Raendern anwenden.
+   * - off:     Geschoss verlaesst Welt seitlich -> tot
+   * - wrap:    links/rechts wickeln um (oben/unten weiter offen)
+   * - sticky:  Bounce mit 50 % Velocity-Verlust
+   * - elastic: Bounce ohne Verlust
+   *
+   * Random-Mode wird beim Round-Start in _currentWallMode aufgeloest.
+   */
+  _applyWallMode(p, bounds) {
+    if (!p.alive || p.mode !== 'flying') return;
+    const mode = this._currentWallMode || 'off';
+    const W = bounds.width;
+    if (mode === 'off') {
+      if (p.x < -50 || p.x > W + 50) p.alive = false;
+      return;
+    }
+    if (mode === 'wrap') {
+      if (p.x < 0) p.x += W;
+      else if (p.x > W) p.x -= W;
+      return;
+    }
+    // sticky / elastic
+    const factor = mode === 'sticky' ? 0.5 : 1.0;
+    if (p.x < 0) {
+      p.x = -p.x;
+      p.vx = -p.vx * factor;
+    } else if (p.x > W) {
+      p.x = 2 * W - p.x;
+      p.vx = -p.vx * factor;
+    }
+    if (p.y < 0) {
+      p.y = -p.y;
+      p.vy = Math.abs(p.vy) * factor;
+    }
+  }
+
   _stepRolling(p, dt, bounds) {
     // Rolle entlang Terrain-Oberflaeche; Hangneigung beschleunigt, Reibung bremst.
     const w = WEAPONS[p.weaponId];
@@ -1092,7 +1132,24 @@ export class Game {
     }
 
     this.terrain = new Terrain(this.worldWidth, this.worldHeight, rng);
-    this.wind = generateWind(rng, this.config.maxWind);
+
+    // Phase 2.2: Wall-Mode pro Runde aufloesen (Random -> konkrete Wahl).
+    this._currentWallMode = this.config.wallMode === 'random'
+      ? WALL_MODE_KEYS[Math.floor(rng() * WALL_MODE_KEYS.length)]
+      : (this.config.wallMode || 'off');
+
+    // Phase 2.3: Wind-Stage pro Runde aufloesen + Base-Wind generieren.
+    const stage = this.config.windStage === 'random'
+      ? WIND_STAGE_KEYS[Math.floor(rng() * WIND_STAGE_KEYS.length)]
+      : (this.config.windStage || 'normal');
+    this._currentWindStage = stage;
+    const maxWind = WIND_STAGE_MAX[stage] ?? 10;
+    this.baseWind = generateWind(rng, maxWind);
+    this.wind = this.baseWind;
+    // Gust-Mechanik nur in Stufe "gale" aktiv.
+    this._gustActive = false;
+    this._gustEndsAt = 0;
+
     this.skyIndex = (this.roundIndex + Math.floor(rng() * 3)) % 3;
 
     // Persistente Tanks: Position + HP fuer neue Runde resetten, Inventory + Credits behalten.

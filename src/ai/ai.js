@@ -38,6 +38,7 @@ export class AiController {
   beginTurn(game) {
     if (!this.tank.alive) return;
     this.state = 'aiming';
+    this.aimStart = performance.now();
 
     const enemies = game.tanks.filter((t) => t.alive && t !== this.tank);
     if (enemies.length === 0) {
@@ -50,6 +51,9 @@ export class AiController {
 
     const sol = this._solveBallistic(game);
     this.aim = this._applyJitter(sol);
+    // Defensiv: aim.power gegen den eigenen Power-Cap clampen — falls der
+    // Solver mal danebenliegt, soll die Konvergenz in update() nicht haengen.
+    if (this.aim.power > this.tank.powerMax) this.aim.power = this.tank.powerMax;
   }
 
   /**
@@ -60,6 +64,11 @@ export class AiController {
   update(dt, fire) {
     if (this.state !== 'aiming') return;
     const t = this.tank;
+
+    // Wenn das Ziel ueber dem eigenen Power-Cap liegt (z.B. weil der Tank
+    // zwischendurch Schaden bekam), aim.power runterclampen — sonst kann
+    // der Tank das Ziel nie erreichen und die KI haengt.
+    if (this.aim.power > t.powerMax) this.aim.power = t.powerMax;
 
     const dA = this.aim.angle - t.turretAngle;
     const dP = this.aim.power - t.power;
@@ -72,6 +81,14 @@ export class AiController {
       t.adjustPower(step);
     }
     if (Math.abs(dA) < 0.4 && Math.abs(dP) < 4) {
+      this.state = 'firing';
+      fire();
+      return;
+    }
+
+    // Safety-Net: nach 4 Sekunden Aimen ohne Konvergenz einfach feuern. Schtzt
+    // gegen Edge-Cases (Cap-Anomalien, Solver-Bugs), die den Spielfluss blockieren.
+    if (this.aimStart && performance.now() - this.aimStart > 4000) {
       this.state = 'firing';
       fire();
     }
@@ -116,13 +133,18 @@ export class AiController {
 
   _solveBallistic(game) {
     const target = this.targetTank;
-    if (!target) return { angle: 90, power: 60 };
+    if (!target) return { angle: 90, power: 600 };
 
     const dx = target.x - this.tank.x;
     const aimRight = dx >= 0;
 
-    // Zwei Iterationen: grobes Raster -> feines Raster um den Bestwert.
-    let best = { angle: 90, power: 600, miss: Infinity };
+    // BUGFIX: Power-Cap des EIGENEN Tanks respektieren — sonst whlt der
+    // Solver eine Power, die der verwundete Tank nie erreichen kann, und
+    // die Konvergenz in update() haengt fr immer.
+    const pMax = Math.max(100, Math.min(1000, this.tank.powerMax));
+    const pMin = Math.min(100, pMax);
+
+    let best = { angle: 90, power: pMax * 0.6, miss: Infinity };
     const evaluate = (a, p) => {
       const miss = this._simulate(a, p, game);
       if (miss < best.miss) best = { angle: a, power: p, miss };
@@ -130,15 +152,17 @@ export class AiController {
 
     const angleStart = aimRight ? 10 : 95;
     const angleEnd = aimRight ? 85 : 170;
-    // Grobes Raster: 4° in angle, 80 Power-Stufen (0..1000-Range).
+    // Grobes Raster: 4 in angle, dynamisches Power-Raster (8 Stufen).
+    const pStep = Math.max(20, Math.round((pMax - pMin) / 9 / 10) * 10);
     for (let a = angleStart; a <= angleEnd; a += 4) {
-      for (let p = 300; p <= 1000; p += 80) evaluate(a, p);
+      for (let p = pMin; p <= pMax; p += pStep) evaluate(a, p);
     }
-    // Feinsuche +/- 6° und +/- 60 Stufen Power um best.
+    // Feinsuche +/- 6 und kleines Power-Fenster um best (auch im Cap).
+    const fineHalf = Math.min(60, Math.max(20, (pMax - pMin) / 8));
     for (let a = best.angle - 6; a <= best.angle + 6; a += 1) {
       if (a < 5 || a > 175) continue;
-      for (let p = best.power - 60; p <= best.power + 60; p += 20) {
-        if (p < 100 || p > 1000) continue;
+      for (let p = best.power - fineHalf; p <= best.power + fineHalf; p += 20) {
+        if (p < pMin || p > pMax) continue;
         evaluate(a, p);
       }
     }
@@ -165,9 +189,10 @@ export class AiController {
         dP += corr;
       }
     }
+    const pMax = Math.max(100, this.tank.powerMax);
     return {
       angle: clamp(sol.angle + dA, 5, 175),
-      power: clamp(sol.power + dP, 100, 1000)
+      power: clamp(sol.power + dP, 100, pMax)
     };
   }
 

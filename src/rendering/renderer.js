@@ -10,13 +10,22 @@ export class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
-    this.width = 0;
-    this.height = 0;
+    /** Viewport in CSS-Pixeln (= sichtbarer Bereich auf dem Bildschirm). */
+    this.viewportW = 0;
+    this.viewportH = 0;
+    /** Welt-Dimensionen in Welt-Einheiten (== CSS-Pixel im "Klein"-Preset). */
+    this.worldW = 1280;
+    this.worldH = 720;
     this.dpr = 1;
+    /** Camera: zoom relativ zum Fit-Scale; pan in Welt-Koordinaten. */
+    this.camera = { zoom: 1, panX: 0, panY: 0 };
     /** Screen-Shake-Zustand (gesetzt von Game._detonate). */
     this.shakeMagnitude = 0;
     this.shakeTime = 0;
     this.shakeMaxTime = 0;
+    /** Aktiver Shake-Offset, in Frame-time einmal berechnet, fuer beide Transformations-Pfade. */
+    this._shakeDx = 0;
+    this._shakeDy = 0;
     this.resize();
     window.addEventListener('resize', () => this.resize());
     // visualViewport reagiert auf Browser-UI-Aufklappen (iOS-URL-Bar etc.) — nicht
@@ -24,6 +33,88 @@ export class Renderer {
     if (window.visualViewport) {
       window.visualViewport.addEventListener('resize', () => this.resize());
     }
+  }
+
+  /**
+   * Setzt die Welt-Dimensionen. Vom Game am Rundenstart aufgerufen.
+   * @param {number} w Welt-Breite (CSS-Pixel-Einheiten)
+   * @param {number} h Welt-Hoehe
+   */
+  setWorld(w, h) {
+    this.worldW = w;
+    this.worldH = h;
+    this._clampPan();
+  }
+
+  /**
+   * Setzt den Zoom-Faktor (1 = fit-to-viewport, > 1 = reingezoomt).
+   * Zoomt um den Viewport-Mittelpunkt — der zentrale Welt-Punkt bleibt
+   * unter dem Viewport-Zentrum, was sich natuerlich anfuehlt.
+   */
+  setZoom(z) {
+    const newZoom = Math.max(1, Math.min(4, z));
+    if (newZoom === this.camera.zoom) return;
+    // Welt-Position unterm Viewport-Center merken.
+    const center = this.screenToWorld(this.viewportW / 2, this.viewportH / 2);
+    this.camera.zoom = newZoom;
+    // Bei zoom == 1 (fit): kein Pan noetig; Welt fuellt das Viewport.
+    if (newZoom <= 1) {
+      this.camera.panX = 0;
+      this.camera.panY = 0;
+      return;
+    }
+    // Pan so setzen, dass `center` weiterhin im Viewport-Mittelpunkt liegt.
+    const visibleW = this.viewportW / this._scale();
+    const visibleH = this.viewportH / this._scale();
+    this.camera.panX = center.x - visibleW / 2;
+    this.camera.panY = center.y - visibleH / 2;
+    this._clampPan();
+  }
+
+  /** Pan in Welt-Pixeln, akkumulativ. */
+  pan(dx, dy) {
+    this.camera.panX += dx;
+    this.camera.panY += dy;
+    this._clampPan();
+  }
+
+  /** Setzt Pan auf (0,0) und Zoom auf 1 — typischer Reset bei neuer Runde. */
+  resetCamera() {
+    this.camera.zoom = 1;
+    this.camera.panX = 0;
+    this.camera.panY = 0;
+  }
+
+  /** Fit-Scale: skaliert die Welt so, dass sie ins Viewport passt. */
+  _fitScale() {
+    return Math.min(this.viewportW / this.worldW, this.viewportH / this.worldH);
+  }
+
+  /** Effektiver Skalierungsfaktor: fit-scale × zoom. */
+  _scale() {
+    return this._fitScale() * this.camera.zoom;
+  }
+
+  /** Zoom-getriebenes Pan-Limit, damit man nicht ueber den Welt-Rand pannt. */
+  _clampPan() {
+    const s = this._scale();
+    const visibleW = this.viewportW / s;
+    const visibleH = this.viewportH / s;
+    const maxX = Math.max(0, this.worldW - visibleW);
+    const maxY = Math.max(0, this.worldH - visibleH);
+    this.camera.panX = Math.max(0, Math.min(maxX, this.camera.panX));
+    this.camera.panY = Math.max(0, Math.min(maxY, this.camera.panY));
+  }
+
+  /** Bildschirm-Koordinate -> Welt-Koordinate (fuer Touch/Maus-Input). */
+  screenToWorld(sx, sy) {
+    const s = this._scale();
+    // Welt ist ggf. zentriert wenn fit-scale durch eine Achse begrenzt ist
+    const worldOnScreenW = this.worldW * s;
+    const worldOnScreenH = this.worldH * s;
+    const offsetX = Math.max(0, (this.viewportW - worldOnScreenW) / 2) - this.camera.panX * s;
+    const offsetY = Math.max(0, (this.viewportH - worldOnScreenH) / 2) - this.camera.panY * s;
+    return { x: (sx - offsetX) / s, y: (sy - offsetY) / s };
   }
 
   /**
@@ -40,9 +131,9 @@ export class Renderer {
   }
 
   /**
-   * Pro Frame aufrufen, BEVOR irgendetwas gezeichnet wird. Setzt die Transform-
-   * Matrix neu — bei aktivem Shake mit zufaelligem Offset, der mit der Restzeit
-   * abklingt.
+   * Pro Frame aufrufen, BEVOR irgendetwas gezeichnet wird. Tickt den Shake
+   * und schaltet auf Bildschirm-Koordinaten (HUD/Overlay-Drawing).
+   * Welt-Drawings danach via `applyCamera()` umschalten.
    * @param {number} dt
    */
   beginFrame(dt) {
@@ -50,44 +141,68 @@ export class Renderer {
       this.shakeTime -= dt;
       const t = Math.max(0, this.shakeTime / this.shakeMaxTime);
       const m = this.shakeMagnitude * t;
-      const dx = (Math.random() - 0.5) * 2 * m;
-      const dy = (Math.random() - 0.5) * 2 * m;
-      this.ctx.setTransform(this.dpr, 0, 0, this.dpr, dx * this.dpr, dy * this.dpr);
-      if (this.shakeTime <= 0) {
-        this.shakeMagnitude = 0;
-        this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-      }
+      this._shakeDx = (Math.random() - 0.5) * 2 * m;
+      this._shakeDy = (Math.random() - 0.5) * 2 * m;
+      if (this.shakeTime <= 0) this.shakeMagnitude = 0;
     } else {
-      this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      this._shakeDx = 0;
+      this._shakeDy = 0;
     }
+    // Identity-Transform mit DPR + Shake (im Screen-Space).
+    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, this._shakeDx * this.dpr, this._shakeDy * this.dpr);
+  }
+
+  /**
+   * Setzt die Transform-Matrix in den Welt-Koord-Modus: alle nachfolgenden
+   * Draw-Calls in Welt-Koordinaten werden korrekt skaliert + gepannt.
+   */
+  applyCamera() {
+    const s = this._scale();
+    const worldOnScreenW = this.worldW * s;
+    const worldOnScreenH = this.worldH * s;
+    const centerX = Math.max(0, (this.viewportW - worldOnScreenW) / 2);
+    const centerY = Math.max(0, (this.viewportH - worldOnScreenH) / 2);
+    const tx = centerX - this.camera.panX * s + this._shakeDx;
+    const ty = centerY - this.camera.panY * s + this._shakeDy;
+    this.ctx.setTransform(this.dpr * s, 0, 0, this.dpr * s, this.dpr * tx, this.dpr * ty);
+  }
+
+  /** Zurueck in Screen-Space (z.B. fuer HUD-Overlays nach den Welt-Drawings). */
+  applyScreenSpace() {
+    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, this._shakeDx * this.dpr, this._shakeDy * this.dpr);
   }
 
   resize() {
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
-    this.width = Math.max(CONFIG.world.minWidth, window.innerWidth);
-    this.height = Math.max(CONFIG.world.minHeight, window.innerHeight);
+    this.viewportW = Math.max(CONFIG.world.minWidth, window.innerWidth);
+    this.viewportH = Math.max(CONFIG.world.minHeight, window.innerHeight);
     this.canvas.width = Math.floor(window.innerWidth * this.dpr);
     this.canvas.height = Math.floor(window.innerHeight * this.dpr);
     this.canvas.style.width = `${window.innerWidth}px`;
     this.canvas.style.height = `${window.innerHeight}px`;
-    // Logische Pixel == CSS-Pixel
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    this.width = window.innerWidth;
-    this.height = window.innerHeight;
+    // Echte Viewport-Werte (CSS-Pixel) — kann kleiner als minWidth sein.
+    this.viewportW = window.innerWidth;
+    this.viewportH = window.innerHeight;
+    // Backwards-compat-Aliasse — manche Stellen referenzieren noch width/height.
+    this.width = this.viewportW;
+    this.height = this.viewportH;
+    this._clampPan();
   }
 
   /**
-   * Himmel-Gradient gemaess Preset-Index.
+   * Himmel-Gradient ueber den gesamten Screen-Space (NICHT in Welt-Koordinaten,
+   * damit Letterbox-Bereiche bei Fit-Scale auch gefaerbt sind).
    * @param {number} skyIndex
    */
   drawSky(skyIndex = 0) {
     const sky = CONFIG.sky.presets[skyIndex % CONFIG.sky.presets.length];
-    const g = this.ctx.createLinearGradient(0, 0, 0, this.height);
+    const g = this.ctx.createLinearGradient(0, 0, 0, this.viewportH);
     g.addColorStop(0, sky.top);
     g.addColorStop(0.55, sky.mid);
     g.addColorStop(1, sky.bot);
     this.ctx.fillStyle = g;
-    this.ctx.fillRect(0, 0, this.width, this.height);
+    this.ctx.fillRect(0, 0, this.viewportW, this.viewportH);
   }
 
   /**
@@ -99,19 +214,20 @@ export class Renderer {
   drawTerrain(terrain) {
     const ctx = this.ctx;
     const { earthTopColor, earthBotColor, surfaceColor, grassBandHeight } = CONFIG.terrain;
+    // Terrain in WELT-Koordinaten — Erde reicht bis Welt-Unterkante.
+    const groundBottom = terrain.height;
 
-    // Erd-Polygon
-    const earthGrad = ctx.createLinearGradient(0, 0, 0, this.height);
+    const earthGrad = ctx.createLinearGradient(0, 0, 0, groundBottom);
     earthGrad.addColorStop(0, earthTopColor);
     earthGrad.addColorStop(1, earthBotColor);
 
     ctx.beginPath();
-    ctx.moveTo(0, this.height);
+    ctx.moveTo(0, groundBottom);
     ctx.lineTo(0, terrain.heights[0]);
     for (let x = 1; x < terrain.width; x++) {
       ctx.lineTo(x, terrain.heights[x]);
     }
-    ctx.lineTo(terrain.width - 1, this.height);
+    ctx.lineTo(terrain.width - 1, groundBottom);
     ctx.closePath();
     ctx.fillStyle = earthGrad;
     ctx.fill();
@@ -246,11 +362,11 @@ export class Renderer {
    * @param {number} wind -10..+10
    */
   drawWindIndicator(wind) {
+    // Wind-Indikator ist ein HUD-Element (Screen-Space, nicht World-Space).
+    this.applyScreenSpace();
     const ctx = this.ctx;
-    // Auf Mobile (schmal) weiter unten platzieren — sonst kollidiert er
-    // mit dem oberen Mobile-HUD.
-    const isMobile = this.width <= 720;
-    const cx = this.width / 2;
+    const isMobile = this.viewportW <= 720;
+    const cx = this.viewportW / 2;
     const pillW = isMobile ? 130 : 180;
     const pillH = 36;
     const cy = isMobile ? 110 : 50;
@@ -324,7 +440,7 @@ export class Renderer {
 
   /** Vollbild loeschen — wird vor jedem Frame aufgerufen. */
   clear() {
-    this.ctx.clearRect(0, 0, this.width, this.height);
+    this.ctx.clearRect(0, 0, this.viewportW, this.viewportH);
   }
 }
 

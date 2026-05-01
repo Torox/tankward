@@ -4,12 +4,13 @@ import { Tank, TANK_COLORS, pickSpawnPositions } from '../entities/tank.js';
 import { Projectile } from '../entities/projectile.js';
 import { FireBlob } from '../entities/fire-blob.js';
 import { WEAPONS, WEAPON_ORDER, canFire, consume as consumeWeapon } from '../entities/weapons.js';
-import { generateWind, muzzleVelocity } from '../physics/ballistics.js';
+import { generateWind, muzzleVelocity, setPhysicsScale } from '../physics/ballistics.js';
 import { checkProjectileImpact, applyBlast, settleTanks } from '../physics/collision.js';
 import { AiController, DIFFICULTY } from '../ai/ai.js';
 import { SoundManager } from '../audio/sound.js';
 import { ParticleSystem } from '../rendering/particles.js';
 import { loadSettings, saveSettings } from './settings.js';
+import { CONFIG } from './config.js';
 import { startLoop } from './loop.js';
 import { createRng } from './rng.js';
 import { Input } from './input.js';
@@ -37,12 +38,16 @@ const DEFAULT_CONFIG = {
   numPlayers: 4,
   numHumans: 1,                    // erster Slot ist Mensch, Rest KI
   aiDifficulty: DIFFICULTY.pro,    // 'beginner' | 'pro' | 'expert'
-  bestOf: 3
+  bestOf: 3,
+  worldSize: 'mittel'              // klein | mittel | gross | riesig
 };
 const PLAYER_NAMES = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10'];
-const KILL_BONUS = 200;
-const ROUND_SURVIVOR_BONUS = 250;
-const HIT_CREDITS_PER_HP = 1;
+// Credit-Skalierung (Stand v1.1): so dass ein durchschnittlicher Sieg in einer
+// Runde fuer eine guenstige Waffe reicht, und ueber 2-3 Runden auch fuer eine
+// teure (z.B. Atombombe 5000¢).
+const KILL_BONUS = 400;
+const ROUND_SURVIVOR_BONUS = 600;
+const HIT_CREDITS_PER_HP = 3;
 
 export class Game {
   constructor() {
@@ -85,6 +90,10 @@ export class Game {
       setupNumHumans: document.getElementById('setup-num-humans'),
       setupDifficulty: document.getElementById('setup-difficulty'),
       setupBestOf: document.getElementById('setup-best-of'),
+      setupWorldSize: document.getElementById('setup-world-size'),
+      // Zoom-Slider (in-game)
+      zoomSlider: document.getElementById('zoom-slider'),
+      zoomLabel: document.getElementById('zoom-label'),
       // Pause
       pause: document.getElementById('screen-pause'),
       btnResume: document.getElementById('btn-resume'),
@@ -108,7 +117,8 @@ export class Game {
       numPlayers: this.settings.numPlayers,
       numHumans: this.settings.numHumans,
       aiDifficulty: this.settings.aiDifficulty,
-      bestOf: this.settings.bestOf
+      bestOf: this.settings.bestOf,
+      worldSize: this.settings.worldSize ?? DEFAULT_CONFIG.worldSize
     };
     this.state = null;
     this.stateTime = 0;
@@ -184,12 +194,20 @@ export class Game {
     if (this.el.setupNumPlayers) this.el.setupNumPlayers.value = String(this.config.numPlayers);
     if (this.el.setupDifficulty) this.el.setupDifficulty.value = this.config.aiDifficulty;
     if (this.el.setupBestOf) this.el.setupBestOf.value = String(this.config.bestOf);
+    if (this.el.setupWorldSize) this.el.setupWorldSize.value = this.config.worldSize;
     this._refreshNumHumansOptions();
     if (this.el.setupNumHumans) {
       const n = clamp(this.config.numHumans, 0, this.config.numPlayers);
       this.el.setupNumHumans.value = String(n);
     }
     this.el.setupNumPlayers?.addEventListener('change', () => this._refreshNumHumansOptions());
+
+    // Zoom-Slider verkabeln (in-game).
+    this.el.zoomSlider?.addEventListener('input', (e) => {
+      const z = parseFloat(/** @type {HTMLInputElement} */ (e.target).value);
+      this.renderer.setZoom(z);
+      if (this.el.zoomLabel) this.el.zoomLabel.textContent = `${z.toFixed(1)}×`;
+    });
 
     this._updateSoundButtons();
 
@@ -209,15 +227,18 @@ export class Game {
     const nh = parseInt(this.el.setupNumHumans?.value ?? '1', 10);
     const diff = this.el.setupDifficulty?.value ?? DIFFICULTY.pro;
     const bo = parseInt(this.el.setupBestOf?.value ?? '3', 10);
+    const ws = this.el.setupWorldSize?.value ?? 'mittel';
     this.config.numPlayers = clamp(np, 2, 10);
     this.config.numHumans = clamp(nh, 0, this.config.numPlayers);
     this.config.aiDifficulty = diff;
     this.config.bestOf = clamp(bo, 1, 9);
+    this.config.worldSize = CONFIG.world.presets[ws] ? ws : 'mittel';
     this.settings = saveSettings({
       numPlayers: this.config.numPlayers,
       numHumans: this.config.numHumans,
       aiDifficulty: this.config.aiDifficulty,
-      bestOf: this.config.bestOf
+      bestOf: this.config.bestOf,
+      worldSize: this.config.worldSize
     });
   }
 
@@ -552,7 +573,7 @@ export class Game {
   // -- Projektil-Update -------------------------------------------------------
 
   _updateProjectiles(dt) {
-    const bounds = { width: this.renderer.width, height: this.renderer.height };
+    const bounds = { width: this.worldWidth, height: this.worldHeight };
 
     if (this.projectile) {
       this._stepProjectile(this.projectile, dt, bounds, /*isChild*/ false);
@@ -797,12 +818,28 @@ export class Game {
   _beginRound() {
     const seed = ((this.roundIndex + 1) * 1000003) ^ ((Math.random() * 1e9) >>> 0);
     const rng = createRng(seed >>> 0);
-    this.terrain = new Terrain(this.renderer.width, this.renderer.height, rng);
+
+    // Welt-Dimensionen aus Preset bestimmen. Welt-Aspect haelt sich an Viewport,
+    // damit "Fit-to-Viewport" weder horizontal noch vertikal Letterbox erzeugt.
+    const preset = CONFIG.world.presets[this.config.worldSize] ?? CONFIG.world.presets.mittel;
+    this.worldWidth = preset.width;
+    const aspect = this.renderer.viewportH / Math.max(1, this.renderer.viewportW);
+    this.worldHeight = Math.max(540, Math.round(this.worldWidth * aspect));
+    this.renderer.setWorld(this.worldWidth, this.worldHeight);
+    this.renderer.resetCamera();
+    // Physik-Skalierung damit groessere Welten weiterhin reichbar sind.
+    setPhysicsScale(this.worldWidth);
+    if (this.el.zoomSlider) {
+      this.el.zoomSlider.value = '1';
+      if (this.el.zoomLabel) this.el.zoomLabel.textContent = '1.0×';
+    }
+
+    this.terrain = new Terrain(this.worldWidth, this.worldHeight, rng);
     this.wind = generateWind(rng);
     this.skyIndex = (this.roundIndex + Math.floor(rng() * 3)) % 3;
 
     // Persistente Tanks: Position + HP fuer neue Runde resetten, Inventory + Credits behalten.
-    const xs = pickSpawnPositions(this.tanks.length, this.renderer.width, rng);
+    const xs = pickSpawnPositions(this.tanks.length, this.worldWidth, rng);
     this.tanks.forEach((t, i) => {
       t.x = xs[i];
       t.y = 0;
@@ -810,6 +847,8 @@ export class Game {
       t.alive = true;
       t.turretAngle = 90;
       t.power = 50;
+      t._lastTickAngle = undefined;
+      t._lastTickPower = undefined;
       // Falls die ausgewaehlte Waffe nicht mehr verfuegbar -> auf Standard zurueck.
       if (!canFire(t, t.selectedWeapon)) t.selectedWeapon = 'standard';
       t.snapToTerrain(this.terrain);
@@ -1046,13 +1085,14 @@ export class Game {
   // -- Render ----------------------------------------------------------------
 
   render(dt, now) {
-    // Shake-Offset anwenden (oder Identity, wenn kein Shake aktiv).
     this.renderer.beginFrame(dt || 0);
-
+    // Sky in SCREEN-Space (faerbt auch Letterbox bei Fit-to-Viewport).
     this.renderer.drawSky(this.skyIndex);
-    if (this.terrain) this.renderer.drawTerrain(this.terrain);
 
     if (this.state !== S.MENU) {
+      // Welt-Space ab hier: Terrain, Tanks, Projektile, Partikel.
+      this.renderer.applyCamera();
+      if (this.terrain) this.renderer.drawTerrain(this.terrain);
       for (let i = 0; i < this.tanks.length; i++) {
         const showActive = i === this.activeIndex && this.state === S.PLAYER_TURN;
         this.renderer.drawTank(this.tanks[i], showActive, now);
@@ -1061,6 +1101,7 @@ export class Game {
       for (const sp of this.subProjectiles) this.renderer.drawProjectile(sp);
       for (const e of this.effects) this.renderer.drawFireBlob(e, now);
       this.particles.draw(this.renderer.ctx);
+      // Wind-Indikator wechselt selbst zurueck in Screen-Space.
       this.renderer.drawWindIndicator(this.wind);
     }
 

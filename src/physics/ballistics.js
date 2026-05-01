@@ -1,12 +1,29 @@
 import { CONFIG } from '../core/config.js';
 
 /**
+ * Welt-abhaengiger Skalierungsfaktor fuer v0. Wird beim Rundenstart von Game
+ * via setPhysicsScale(worldWidth) gesetzt, damit groessere Welten weiterhin
+ * "die andere Seite" erreichen.
+ *
+ * Mathematik: Reichweite = v0²/g bei 45°. Wenn v0 mit sqrt(world/ref) skaliert,
+ * skaliert die Reichweite linear mit der Weltbreite — exakt was wir wollen.
+ */
+let _velocityScale = 1;
+
+export function setPhysicsScale(worldWidth) {
+  _velocityScale = Math.sqrt(worldWidth / CONFIG.world.referenceWidth);
+}
+
+export function getPhysicsScale() {
+  return _velocityScale;
+}
+
+/**
  * Konvertiert die Spieler-Staerke (0..100) in eine Anfangsgeschwindigkeit (px/s).
- * v0 max = 900 px/s ergibt mit gravity=600 eine maximale Reichweite v0²/g = 1350 px,
- * was selbst auf breiten Monitoren ueber den ganzen Frame reicht.
+ * Skaliert mit der Welt-Groesse.
  */
 export function powerToVelocity(power) {
-  return power * 9;
+  return power * 9 * _velocityScale;
 }
 
 /**

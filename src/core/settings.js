@@ -11,7 +11,8 @@ const DEFAULTS = {
   numPlayers: 4,
   numHumans: 1,
   aiDifficulty: 'pro',
-  bestOf: 3
+  bestOf: 3,
+  worldSize: 'mittel'
 };
 
 let cache = null;

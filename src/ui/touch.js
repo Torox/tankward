@@ -2,13 +2,14 @@
  * Mobile-Touch-Steuerung — direkte Canvas-Manipulation statt Joystick.
  *
  * Konzept:
- *  - Finger auf Canvas legen + ziehen: setzt Winkel + Stärke des aktiven Panzers
- *    relativ zur Tank-Position (Vektor von Tank zu Finger = Zielrichtung,
+ *  - 1 Finger auf Canvas: Drag setzt Winkel + Stärke des aktiven Panzers
+ *    (Vektor vom Tank zum Finger in WELT-Koordinaten = Zielrichtung,
  *    Distanz = Stärke).
- *  - Loslassen: nichts. Es gibt einen dedizierten FEUER-Button (vermeidet
- *    versehentliches Schiessen waehrend des Zielens).
- *  - Touch-Overlay wird automatisch sichtbar, sobald ein Touch-Event passiert
- *    ODER der Pointer "coarse" ist (Phone/Tablet).
+ *  - 2 Finger: Pan der Karte (Mittelpunkt-Delta -> Camera-Pan).
+ *  - Loslassen: nichts. Es gibt einen dedizierten FEUER-Button.
+ *
+ * Touch-Coords werden via renderer.screenToWorld in Welt-Koords umgerechnet,
+ * damit Aim auch mit aktivem Zoom + Pan funktioniert.
  *
  * @param {import('../core/game.js').Game} game
  */
@@ -26,63 +27,94 @@ function detectTouch() {
     touchActive = true;
     document.body.classList.add('has-touch');
   };
-  // Sofort, wenn das Geraet einen groben Pointer hat.
   if (window.matchMedia?.('(pointer: coarse)').matches) enable();
-  // Sonst beim ersten Touch-Event (Hybrid-Geraete: Touchscreen-Laptop).
   window.addEventListener('touchstart', enable, { once: true, capture: true, passive: true });
 }
 
-const POWER_REACH_PX = 220; // Pixel-Distanz fuer Power=100 (Daumen-Reichweite)
+const POWER_REACH_PX = 220; // Welt-Pixel fuer Power=100
 
 function bindCanvasAim(game) {
   const canvas = document.getElementById('game-canvas');
   if (!canvas) return;
 
-  let dragging = false;
-  let trackingTouchId = null;
+  let mode = 'idle'; // 'idle' | 'aim' | 'pan'
+  let aimTouchId = null;
+  let panLastMid = null;
+  let panTouchIds = null;
 
-  /** @param {Touch} touch */
-  const apply = (touch) => {
+  const screenToWorld = (clientX, clientY) => {
+    const rect = canvas.getBoundingClientRect();
+    return game.renderer.screenToWorld(clientX - rect.left, clientY - rect.top);
+  };
+
+  const applyAim = (touch) => {
     if (game.state !== 'PLAYER_TURN' || game.paused) return;
     const t = game.tanks[game.activeIndex];
     if (!t || !t.alive || !t.isHuman) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const fx = touch.clientX - rect.left;
-    const fy = touch.clientY - rect.top;
-
-    // Vektor vom Rohrfuss zum Finger.
+    const w = screenToWorld(touch.clientX, touch.clientY);
     const cx = t.x;
-    const cy = t.y - 16; // ungefaehrer Turm-Mittelpunkt
-    const dx = fx - cx;
-    const dy = fy - cy;
+    const cy = t.y - 16;
+    const dx = w.x - cx;
+    const dy = w.y - cy;
 
-    // Winkel berechnen (Canvas-Konvention: +y nach unten -> negieren).
     let deg = (Math.atan2(-dy, dx) * 180) / Math.PI;
     if (deg < 0) deg += 360;
-    // Tank kann nur 0..180 zielen (oben). Untere Halbkugel auf naechste
-    // horizontale Grenze klemmen, damit der Spieler nicht "unten" ziehen kann.
     if (deg > 180) deg = deg > 270 ? 0 : 180;
     deg = clamp(deg, 5, 175);
     t.turretAngle = deg;
 
-    // Power: Distanz / POWER_REACH_PX, geclamped.
     const dist = Math.hypot(dx, dy);
     t.power = clamp(Math.round((dist / POWER_REACH_PX) * 100), 0, 100);
+  };
+
+  const updatePan = (touches) => {
+    // Mid-Punkt zwischen den zwei verfolgten Fingern.
+    let a = null, b = null;
+    for (let i = 0; i < touches.length; i++) {
+      if (touches[i].identifier === panTouchIds[0]) a = touches[i];
+      if (touches[i].identifier === panTouchIds[1]) b = touches[i];
+    }
+    if (!a || !b) return;
+    const rect = canvas.getBoundingClientRect();
+    const midX = (a.clientX + b.clientX) / 2 - rect.left;
+    const midY = (a.clientY + b.clientY) / 2 - rect.top;
+    if (panLastMid) {
+      // Pan in Welt-Pixeln = Screen-Delta / Scale (umgekehrt zum Mid-Movement).
+      const scale = game.renderer._scale();
+      const dx = (panLastMid.x - midX) / scale;
+      const dy = (panLastMid.y - midY) / scale;
+      game.renderer.pan(dx, dy);
+    }
+    panLastMid = { x: midX, y: midY };
   };
 
   canvas.addEventListener(
     'touchstart',
     (e) => {
+      // Mehr als 1 Finger -> Pan-Modus
+      if (e.touches.length >= 2) {
+        e.preventDefault();
+        if (mode === 'aim') {
+          mode = 'idle';
+          aimTouchId = null;
+        }
+        mode = 'pan';
+        panTouchIds = [e.touches[0].identifier, e.touches[1].identifier];
+        panLastMid = null;
+        updatePan(e.touches);
+        return;
+      }
+      // 1 Finger -> Aim
       if (game.state !== 'PLAYER_TURN') return;
       const t = game.tanks[game.activeIndex];
       if (!t || !t.isHuman || !t.alive) return;
       const touch = e.changedTouches[0];
       if (!touch) return;
       e.preventDefault();
-      dragging = true;
-      trackingTouchId = touch.identifier;
-      apply(touch);
+      mode = 'aim';
+      aimTouchId = touch.identifier;
+      applyAim(touch);
     },
     { passive: false }
   );
@@ -90,24 +122,40 @@ function bindCanvasAim(game) {
   canvas.addEventListener(
     'touchmove',
     (e) => {
-      if (!dragging) return;
-      e.preventDefault();
-      const touch = findTouch(e.changedTouches, trackingTouchId);
-      if (touch) apply(touch);
+      if (mode === 'pan') {
+        e.preventDefault();
+        updatePan(e.touches);
+        return;
+      }
+      if (mode === 'aim') {
+        e.preventDefault();
+        const touch = findTouch(e.changedTouches, aimTouchId);
+        if (touch) applyAim(touch);
+      }
     },
     { passive: false }
   );
 
-  const endDrag = (e) => {
-    if (!dragging) return;
-    const ended = findTouch(e.changedTouches, trackingTouchId);
-    if (ended) {
-      dragging = false;
-      trackingTouchId = null;
+  const endTouch = (e) => {
+    if (mode === 'pan') {
+      // Wenn nur noch 0 oder 1 Finger uebrig: Pan beenden.
+      if (e.touches.length < 2) {
+        mode = 'idle';
+        panTouchIds = null;
+        panLastMid = null;
+      }
+      return;
+    }
+    if (mode === 'aim') {
+      const ended = findTouch(e.changedTouches, aimTouchId);
+      if (ended) {
+        mode = 'idle';
+        aimTouchId = null;
+      }
     }
   };
-  canvas.addEventListener('touchend', endDrag);
-  canvas.addEventListener('touchcancel', endDrag);
+  canvas.addEventListener('touchend', endTouch);
+  canvas.addEventListener('touchcancel', endTouch);
 }
 
 function bindButtons(game) {

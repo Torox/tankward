@@ -51,6 +51,15 @@ app.innerHTML = `
           <option value="7">Best of 7</option>
         </select>
       </label>
+      <label class="flex flex-col gap-1 col-span-2">
+        <span class="text-white/70">Welt-Größe</span>
+        <select id="setup-world-size" class="bg-tw-panel border border-white/20 rounded px-2 py-2 text-white">
+          <option value="klein">Klein (1280)</option>
+          <option value="mittel" selected>Mittel (2000)</option>
+          <option value="gross">Groß (3000)</option>
+          <option value="riesig">Riesig (4200)</option>
+        </select>
+      </label>
     </div>
 
     <button id="btn-start"
@@ -147,9 +156,17 @@ app.innerHTML = `
   </div>
 
   <div id="touch-controls" class="hidden absolute inset-x-0 bottom-0 pointer-events-none z-10">
-    <div class="flex justify-end items-end p-3 gap-2">
-      <div id="touch-hint" class="font-pixel text-[9px] text-white/80 bg-tw-panel/85 border border-white/10 rounded px-2 py-1 pointer-events-none max-w-[40%] leading-tight transition-opacity duration-700">
-        Tippen + ziehen aufs Feld zum Zielen.
+    <div class="flex justify-between items-end p-3 gap-2">
+      <div class="flex flex-col gap-2 pointer-events-auto bg-tw-panel/85 border border-white/10 rounded px-2 py-2 max-w-[40%]">
+        <div class="font-pixel text-[8px] text-white/70 flex items-center justify-between gap-2">
+          <span>Zoom</span>
+          <span id="zoom-label" class="text-tw-accent">1.0×</span>
+        </div>
+        <input id="zoom-slider" type="range" min="1" max="4" step="0.1" value="1"
+          class="w-full accent-tw-accent" style="touch-action:manipulation" />
+        <div id="touch-hint" class="font-pixel text-[8px] text-white/60 leading-tight transition-opacity duration-700">
+          Tippen + ziehen aufs Feld zum Zielen.<br>2 Finger zum Verschieben.
+        </div>
       </div>
       <div class="flex items-end gap-2 pointer-events-auto">
         <button id="touch-weapon"

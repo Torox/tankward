@@ -8,7 +8,18 @@ export const CONFIG = {
     // Logische Aufloesung (CSS-Pixel). Renderer skaliert auf devicePixelRatio.
     minWidth: 800,
     minHeight: 480,
-    gravity: 600 // px/s^2 — gefuehlt "richtig" fuer Standard-Schussweiten
+    gravity: 600, // px/s^2 — gefuehlt "richtig" fuer Standard-Schussweiten
+    // Referenz-Breite fuer Physik-Skalierung. Bei Welt-Breite > Referenz wird
+    // v0_max proportional sqrt(world/ref) skaliert, damit Reichweite in
+    // groesseren Welten weiterhin "die andere Seite" trifft.
+    referenceWidth: 1280,
+    // Welt-Presets — Spieler waehlt im Hauptmenue.
+    presets: {
+      klein:  { width: 1280, label: 'Klein' },
+      mittel: { width: 2000, label: 'Mittel' },
+      gross:  { width: 3000, label: 'Groß' },
+      riesig: { width: 4200, label: 'Riesig' }
+    }
   },
 
   terrain: {

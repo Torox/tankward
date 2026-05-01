@@ -31,23 +31,6 @@ app.innerHTML = `
         </select>
       </label>
       <label class="flex flex-col gap-1">
-        <span class="text-white/70">davon Mensch</span>
-        <select id="setup-num-humans" class="bg-tw-panel border border-white/20 rounded px-2 py-2 text-white"></select>
-      </label>
-      <label class="flex flex-col gap-1">
-        <span class="text-white/70">KI-Charakter</span>
-        <select id="setup-character" class="bg-tw-panel border border-white/20 rounded px-2 py-2 text-white">
-          <option value="random" selected>🎲 Zufall pro Tank</option>
-          <option value="mr-stupid">🤡 Mr. Stupid (zufällig)</option>
-          <option value="lobber">🏹 Lobber (Bogen)</option>
-          <option value="rifleman">🎯 Rifleman (Direkt)</option>
-          <option value="windless-wit">🌬️ Windless Wit (ignoriert Wind)</option>
-          <option value="lob-shoot">🎲 Lob &amp; Shoot</option>
-          <option value="twanger">🪞 Twanger (Bounce)</option>
-          <option value="wind-master">🌪️ Wind Master (Profi)</option>
-        </select>
-      </label>
-      <label class="flex flex-col gap-1">
         <span class="text-white/70">Runden</span>
         <select id="setup-best-of" class="bg-tw-panel border border-white/20 rounded px-2 py-2 text-white">
           <option value="1">Best of 1</option>
@@ -83,6 +66,24 @@ app.innerHTML = `
       Leertaste = Feuer · Tab/E = Waffe · Q = zurück · ESC = Pause
     </div>
     <div class="font-pixel text-[9px] text-white/30">v1.0</div>
+  </div>
+
+  <div id="screen-player-setup" class="screen hidden flex flex-col items-stretch px-4 py-4 overflow-auto gap-3">
+    <div class="flex items-center justify-between gap-3">
+      <button id="btn-setup-back"
+        class="font-pixel text-[10px] bg-tw-panel/80 hover:bg-tw-panel text-white px-3 py-2 rounded border border-white/20">
+        ← Zurück
+      </button>
+      <h2 class="font-pixel text-base md:text-xl text-tw-accent">Spieler-Auswahl</h2>
+      <span class="w-16"></span>
+    </div>
+    <div id="player-setup-rows" class="w-full max-w-2xl mx-auto flex flex-col gap-2"></div>
+    <div class="flex justify-center pt-2 pb-4">
+      <button id="btn-setup-start"
+        class="font-pixel text-sm bg-tw-accent text-tw-bg px-8 py-3 rounded shadow hover:bg-yellow-300 transition">
+        Start
+      </button>
+    </div>
   </div>
 
   <div id="screen-hud" class="hidden">

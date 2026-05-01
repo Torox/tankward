@@ -26,6 +26,7 @@ import { Input } from './input.js';
  */
 export const S = Object.freeze({
   MENU: 'MENU',
+  PLAYER_SETUP: 'PLAYER_SETUP',
   ROUND_START: 'ROUND_START',
   PLAYER_TURN: 'PLAYER_TURN',
   PROJECTILE_FLYING: 'PROJECTILE_FLYING',
@@ -74,6 +75,10 @@ export class Game {
     /** @type {Record<string, HTMLElement|null>} */
     this.el = {
       menu: document.getElementById('screen-menu'),
+      playerSetup: document.getElementById('screen-player-setup'),
+      playerSetupRows: document.getElementById('player-setup-rows'),
+      btnSetupBack: document.getElementById('btn-setup-back'),
+      btnSetupStart: document.getElementById('btn-setup-start'),
       hud: document.getElementById('screen-hud'),
       banner: document.getElementById('screen-banner'),
       shop: document.getElementById('screen-shop'),
@@ -103,8 +108,6 @@ export class Game {
       btnBackMenu: document.getElementById('btn-back-menu'),
       // Setup-Form
       setupNumPlayers: document.getElementById('setup-num-players'),
-      setupNumHumans: document.getElementById('setup-num-humans'),
-      setupCharacter: document.getElementById('setup-character'),
       setupBestOf: document.getElementById('setup-best-of'),
       setupWorldSize: document.getElementById('setup-world-size'),
       // Zoom-Slider (in-game)
@@ -201,6 +204,16 @@ export class Game {
       this._readSetupForm();
       if (this.settings.music) this.sound.setMusic(true);
       this.sound.playClick();
+      // Phase 3.3: Statt direkt zu starten geht's auf die Spieler-Auswahl-Seite.
+      this.setState(S.PLAYER_SETUP);
+    });
+    this.el.btnSetupBack?.addEventListener('click', () => {
+      this.sound.playClick();
+      this.setState(S.MENU);
+    });
+    this.el.btnSetupStart?.addEventListener('click', () => {
+      this.sound.playClick();
+      this._readPlayerSetupRows();
       this._startNewGame();
     });
     this.el.btnPause?.addEventListener('click', () => this._openPause());
@@ -231,15 +244,8 @@ export class Game {
     // dann numHumans-Wert setzen — sonst wird value="" gesetzt, weil Options
     // noch leer sind.
     if (this.el.setupNumPlayers) this.el.setupNumPlayers.value = String(this.config.numPlayers);
-    if (this.el.setupCharacter) this.el.setupCharacter.value = this.config.aiCharacter ?? 'random';
     if (this.el.setupBestOf) this.el.setupBestOf.value = String(this.config.bestOf);
     if (this.el.setupWorldSize) this.el.setupWorldSize.value = this.config.worldSize;
-    this._refreshNumHumansOptions();
-    if (this.el.setupNumHumans) {
-      const n = clamp(this.config.numHumans, 0, this.config.numPlayers);
-      this.el.setupNumHumans.value = String(n);
-    }
-    this.el.setupNumPlayers?.addEventListener('change', () => this._refreshNumHumansOptions());
 
     // Settings-Submenue verkabeln.
     if (this.el.setWindStage) this.el.setWindStage.value = this.config.windStage;
@@ -273,17 +279,11 @@ export class Game {
 
   _readSetupForm() {
     const np = parseInt(this.el.setupNumPlayers?.value ?? '4', 10);
-    const nh = parseInt(this.el.setupNumHumans?.value ?? '1', 10);
-    const character = this.el.setupCharacter?.value ?? 'random';
     const bo = parseInt(this.el.setupBestOf?.value ?? '3', 10);
     this.config.numPlayers = clamp(np, 2, 10);
-    this.config.numHumans = clamp(nh, 0, this.config.numPlayers);
-    this.config.aiCharacter = character;
     this.config.bestOf = clamp(bo, 1, 9);
     this.settings = saveSettings({
       numPlayers: this.config.numPlayers,
-      numHumans: this.config.numHumans,
-      aiCharacter: this.config.aiCharacter,
       bestOf: this.config.bestOf
     });
   }
@@ -309,17 +309,110 @@ export class Game {
     });
   }
 
-  _refreshNumHumansOptions() {
-    if (!this.el.setupNumHumans || !this.el.setupNumPlayers) return;
-    const np = parseInt(this.el.setupNumPlayers.value, 10);
-    const prevRaw = parseInt(this.el.setupNumHumans.value, 10);
-    // Wenn vorher kein gueltiger Wert existierte, Default aus Settings/Config nehmen.
-    const fallback = clamp(this.config.numHumans ?? 1, 0, np);
-    const current = Number.isFinite(prevRaw) ? Math.min(prevRaw, np) : fallback;
-    const opts = [];
-    for (let i = 0; i <= np; i++) opts.push(`<option value="${i}">${i}</option>`);
-    this.el.setupNumHumans.innerHTML = opts.join('');
-    this.el.setupNumHumans.value = String(current);
+  // -- Player-Setup-Screen (Phase 3.3) ---------------------------------------
+
+  /**
+   * Liefert die Slot-Konfiguration. Beim ersten Aufruf bzw. wenn die Anzahl
+   * der Spieler veraendert wurde, wird das Default-Layout erzeugt:
+   *   Slot 0       = Mensch ("Spieler 1")
+   *   Slot 1..N-1  = KI mit Charakter "random"
+   *
+   * Persistierte Werte (Namen + Charakter-Auswahl) werden aus settings.players
+   * uebernommen, soweit sie noch in den Slot-Bereich passen.
+   */
+  _ensurePlayerConfig() {
+    const np = this.config.numPlayers;
+    const persisted = this.settings.players ?? [];
+    const current = this.playerConfig ?? [];
+    const next = [];
+    for (let i = 0; i < np; i++) {
+      const fallback = current[i] ?? persisted[i] ?? null;
+      next.push({
+        type: fallback?.type ?? (i === 0 ? 'human' : 'ai'),
+        name: fallback?.name ?? (i === 0 ? 'Spieler 1' : ''),
+        character: fallback?.character ?? 'random'
+      });
+    }
+    this.playerConfig = next;
+  }
+
+  /** Baut das HTML fuer die N Slot-Reihen. */
+  _renderPlayerSetup() {
+    this._ensurePlayerConfig();
+    const rows = this.el.playerSetupRows;
+    if (!rows) return;
+    const characterOpts = `
+      <option value="random">🎲 Zufall</option>
+      <option value="mr-stupid">🤡 Mr. Stupid</option>
+      <option value="lobber">🏹 Lobber</option>
+      <option value="rifleman">🎯 Rifleman</option>
+      <option value="windless-wit">🌬️ Windless Wit</option>
+      <option value="lob-shoot">🎲 Lob &amp; Shoot</option>
+      <option value="twanger">🪞 Twanger</option>
+      <option value="wind-master">🌪️ Wind Master</option>
+    `;
+    rows.innerHTML = this.playerConfig.map((slot, i) => {
+      const color = TANK_COLORS[i % TANK_COLORS.length];
+      const isHuman = slot.type === 'human';
+      return `
+        <div class="player-row bg-tw-panel/80 border border-white/10 rounded p-2 flex items-center gap-2 font-pixel text-[10px]"
+             style="border-left:4px solid ${color}">
+          <span class="w-12 shrink-0 text-tw-accent">P${i + 1}</span>
+          <div class="flex shrink-0 gap-1">
+            <button data-slot-type="human" data-slot-idx="${i}"
+              class="player-type-btn px-2 py-1 rounded border ${isHuman ? 'bg-tw-accent text-tw-bg border-tw-accent' : 'bg-tw-bg/60 text-white/70 border-white/20'}">
+              👤 Mensch
+            </button>
+            <button data-slot-type="ai" data-slot-idx="${i}"
+              class="player-type-btn px-2 py-1 rounded border ${!isHuman ? 'bg-tw-accent text-tw-bg border-tw-accent' : 'bg-tw-bg/60 text-white/70 border-white/20'}">
+              🤖 KI
+            </button>
+          </div>
+          <div class="flex-1 min-w-0">
+            ${isHuman
+              ? `<input type="text" data-slot-name="${i}" value="${escapeHtml(slot.name || `Spieler ${i + 1}`)}"
+                    placeholder="Name"
+                    class="w-full bg-tw-bg/80 border border-white/20 rounded px-2 py-1 text-white" />`
+              : `<select data-slot-character="${i}"
+                    class="w-full bg-tw-bg/80 border border-white/20 rounded px-2 py-1 text-white">
+                    ${characterOpts}
+                 </select>`
+            }
+          </div>
+        </div>
+      `;
+    }).join('');
+    // Character-Selects auf den persistierten Wert setzen
+    rows.querySelectorAll('select[data-slot-character]').forEach((sel) => {
+      const idx = parseInt(sel.getAttribute('data-slot-character'), 10);
+      sel.value = this.playerConfig[idx]?.character ?? 'random';
+    });
+    // Type-Buttons binden
+    rows.querySelectorAll('button[data-slot-type]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const idx = parseInt(btn.getAttribute('data-slot-idx'), 10);
+        const type = btn.getAttribute('data-slot-type');
+        if (this.playerConfig[idx]) {
+          this.playerConfig[idx].type = type;
+          this._renderPlayerSetup(); // Neu rendern fuer Layout-Wechsel
+        }
+      });
+    });
+  }
+
+  /** Liest die Slot-Werte aus dem DOM zurueck in playerConfig + persistiert sie. */
+  _readPlayerSetupRows() {
+    const rows = this.el.playerSetupRows;
+    if (!rows || !this.playerConfig) return;
+    rows.querySelectorAll('input[data-slot-name]').forEach((inp) => {
+      const idx = parseInt(inp.getAttribute('data-slot-name'), 10);
+      if (this.playerConfig[idx]) this.playerConfig[idx].name = inp.value.trim() || `Spieler ${idx + 1}`;
+    });
+    rows.querySelectorAll('select[data-slot-character]').forEach((sel) => {
+      const idx = parseInt(sel.getAttribute('data-slot-character'), 10);
+      if (this.playerConfig[idx]) this.playerConfig[idx].character = sel.value;
+    });
+    this.settings = saveSettings({ players: this.playerConfig });
   }
 
   _openPause() {
@@ -410,6 +503,7 @@ export class Game {
   }
 
   _startNewGame() {
+    this._ensurePlayerConfig();
     this.scores = new Array(this.config.numPlayers).fill(0);
     this.roundIndex = 0;
     this.maxRounds = this.config.bestOf;
@@ -418,11 +512,14 @@ export class Game {
     // Persistente Tanks: bleiben ueber Runden hinweg (Inventory + Credits).
     this.tanks = [];
     for (let i = 0; i < this.config.numPlayers; i++) {
-      const isHuman = i < this.config.numHumans;
-      const baseName = PLAYER_NAMES[i];
+      const slot = this.playerConfig[i];
+      const isHuman = slot.type === 'human';
+      const baseId = PLAYER_NAMES[i];
+      // Anzeigename: Mensch-Name aus Eingabe, KI bekommt Charakter-Name (sobald
+      // der AiController gebaut ist, ueberschreiben wir name dann).
       const t = new Tank({
-        id: baseName,
-        name: isHuman ? baseName : `${baseName} (KI)`,
+        id: baseId,
+        name: isHuman ? (slot.name || `Spieler ${i + 1}`) : `${baseId}`,
         color: TANK_COLORS[i % TANK_COLORS.length],
         x: 0,
         isHuman
@@ -431,9 +528,10 @@ export class Game {
       t.credits = this.config.startCredits;
       t.lastShopPurchases = [];
       if (!isHuman) {
-        // Phase 3: Charakter pro Tank. Bei aiCharacter='random' rollt jeder
-        // Tank seinen eigenen Charakter (max Variety in einer Runde).
-        t.ai = new AiController(t, this.config.aiCharacter || this.config.aiDifficulty);
+        t.ai = new AiController(t, slot.character || 'random');
+        // Anzeigename = Charaktername (z. B. "Lobber") — der Spieler weiss
+        // damit immer, gegen welchen Charakter er gerade antritt.
+        t.name = `${t.ai.character.emoji} ${t.ai.character.name}`;
       }
       this.tanks.push(t);
     }
@@ -453,6 +551,10 @@ export class Game {
     switch (state) {
       case S.MENU:
         this._showOnly('menu');
+        break;
+      case S.PLAYER_SETUP:
+        this._showOnly('playerSetup');
+        this._renderPlayerSetup();
         break;
       case S.ROUND_START:
         this._showOnly('hud');
@@ -1329,7 +1431,7 @@ export class Game {
   }
 
   _showOnly(name) {
-    for (const k of ['menu', 'hud', 'shop', 'gameover']) {
+    for (const k of ['menu', 'playerSetup', 'hud', 'shop', 'gameover']) {
       if (!this.el[k]) continue;
       if (k === name) this.el[k].classList.remove('hidden');
       else this.el[k].classList.add('hidden');
@@ -1448,7 +1550,7 @@ export class Game {
     // Sky in SCREEN-Space (faerbt auch Letterbox bei Fit-to-Viewport).
     this.renderer.drawSky(this.skyIndex);
 
-    if (this.state !== S.MENU) {
+    if (this.state !== S.MENU && this.state !== S.PLAYER_SETUP) {
       // Welt-Space ab hier: Terrain, Tanks, Projektile, Partikel.
       this.renderer.applyCamera();
       if (this.terrain) this.renderer.drawTerrain(this.terrain);
@@ -1561,6 +1663,13 @@ function shortName(name) {
 
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
+}
+
+/** Sehr einfacher HTML-Escape fuer Spielernamen im Player-Setup. */
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
 }
 
 /**

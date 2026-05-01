@@ -98,6 +98,7 @@ export class Game {
     this.settings = loadSettings();
     this.sound = new SoundManager();
     this.sound.muted = !this.settings.sound;
+    this.sound.musicTrackIdx = this.settings.musicTrack ?? 0;
 
     // Pre-Pause-State, damit Resume in den richtigen Zustand zurueckkehrt.
     this._pausedFrom = null;
@@ -254,10 +255,38 @@ export class Game {
     this._updateSoundButtons();
   }
 
+  /**
+   * Cycle: OFF -> Track 0 -> Track 1 -> ... -> letzter Track -> OFF.
+   * Browser-Autoplay-Policy: musik startet nur, wenn dieser Click ein
+   * User-Gesture-Trigger ist (sound.init wurde im Start-Click gerufen).
+   */
   _toggleMusic() {
-    this.settings = saveSettings({ music: !this.settings.music });
-    if (this.settings.music && this.settings.sound) this.sound.setMusic(true);
-    else this.sound.setMusic(false);
+    this.sound.init();
+    this.sound.resume();
+    const tracks = this.sound.trackList?.() ?? [];
+
+    if (!this.settings.music) {
+      // Aus -> Erster Track
+      this.settings = saveSettings({ music: true, musicTrack: 0 });
+      this.sound.musicTrackIdx = 0;
+      this.sound.music?.setTrack(0);
+      if (this.settings.sound) this.sound.setMusic(true);
+    } else {
+      // An -> naechster Track ODER aus
+      const next = (this.settings.musicTrack ?? 0) + 1;
+      if (next >= tracks.length) {
+        this.settings = saveSettings({ music: false });
+        this.sound.setMusic(false);
+      } else {
+        this.settings = saveSettings({ musicTrack: next });
+        this.sound.musicTrackIdx = next;
+        this.sound.music?.setTrack(next);
+        if (this.settings.sound) {
+          this.sound.setMusic(false);
+          this.sound.setMusic(true); // restart mit neuem Track
+        }
+      }
+    }
     this._updateSoundButtons();
   }
 
@@ -266,7 +295,12 @@ export class Game {
       this.el.btnSound.textContent = `Sound ${this.settings.sound ? '◉' : '○'}`;
     }
     if (this.el.btnMusic) {
-      this.el.btnMusic.textContent = `Musik ${this.settings.music ? '◉' : '○'}`;
+      if (this.settings.music) {
+        const name = this.sound.currentTrackName?.() || `Track ${this.settings.musicTrack + 1}`;
+        this.el.btnMusic.textContent = `♪ ${name}`;
+      } else {
+        this.el.btnMusic.textContent = 'Musik ○';
+      }
     }
   }
 
@@ -455,6 +489,25 @@ export class Game {
     if (this.input.isDown('ArrowRight')) active.adjustAngle(-angleSpeed);
     if (this.input.isDown('ArrowUp')) active.adjustPower(powerSpeed);
     if (this.input.isDown('ArrowDown')) active.adjustPower(-powerSpeed);
+
+    // Aim-Tick: persistente "letzter-Tick"-Werte am Tank, damit auch
+    // Touch-Drag (der ausserhalb dieser Update-Funktion auf den Tank schreibt)
+    // erkannt wird. Initialisiere beide Felder einmalig pro Tank-Aktivierung.
+    const curA = Math.floor(active.turretAngle);
+    const curP = Math.floor(active.power);
+    if (active._lastTickAngle === undefined) {
+      active._lastTickAngle = curA;
+      active._lastTickPower = curP;
+    } else {
+      if (curA !== active._lastTickAngle) {
+        this.sound.playAimTick('angle', curA > active._lastTickAngle ? +1 : -1);
+        active._lastTickAngle = curA;
+      }
+      if (curP !== active._lastTickPower) {
+        this.sound.playAimTick('power', curP > active._lastTickPower ? +1 : -1);
+        active._lastTickPower = curP;
+      }
+    }
 
     if (this.input.consume('Space')) this._fire();
     if (this.input.consume('Tab')) this._cycleWeapon(active, +1);

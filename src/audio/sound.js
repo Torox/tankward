@@ -1,3 +1,5 @@
+import { MusicEngine, trackList } from './music.js';
+
 /**
  * SoundManager — synthetisiert alle Effekte mit der Web Audio API; keine Asset-Dateien.
  *
@@ -10,12 +12,11 @@ export class SoundManager {
     this.ctx = null;
     /** @type {GainNode|null} */
     this.master = null;
-    /** @type {GainNode|null} */
-    this.musicGain = null;
-    /** @type {OscillatorNode|null} */
-    this._musicSrc = null;
+    /** @type {MusicEngine|null} */
+    this.music = null;
     this.muted = false;
     this.musicEnabled = true;
+    this.musicTrackIdx = 0;
   }
 
   init() {
@@ -26,6 +27,8 @@ export class SoundManager {
     this.master = this.ctx.createGain();
     this.master.gain.value = this.muted ? 0 : 0.7;
     this.master.connect(this.ctx.destination);
+    this.music = new MusicEngine(this.ctx, this.master);
+    this.music.setTrack(this.musicTrackIdx);
   }
 
   resume() {
@@ -41,6 +44,27 @@ export class SoundManager {
     this.musicEnabled = on;
     if (on) this._startMusic();
     else this._stopMusic();
+  }
+
+  /** Wechselt zum naechsten Track (rotiert). Returnt den neuen Track-Namen. */
+  nextMusicTrack() {
+    if (!this.music) return '';
+    const wasPlaying = this.music.playing;
+    this.music.next();
+    this.musicTrackIdx = this.music.trackIdx;
+    if (wasPlaying) {
+      this.music.stop();
+      this.music.start();
+    }
+    return this.music.trackName;
+  }
+
+  currentTrackName() {
+    return this.music?.trackName || trackList()[this.musicTrackIdx] || '';
+  }
+
+  trackList() {
+    return trackList();
   }
 
   // -- Effekte ---------------------------------------------------------------
@@ -137,6 +161,33 @@ export class SoundManager {
     osc.stop(t + 0.05);
   }
 
+  /**
+   * Kurzer Blip beim Anpassen von Winkel/Staerke — wie im Original-Tankwars.
+   * Tonhoehe leicht moduliert je nach Richtung (up vs down).
+   * @param {'angle'|'power'} kind
+   * @param {number} dir +1 = hoeher, -1 = tiefer
+   */
+  playAimTick(kind = 'angle', dir = 1) {
+    if (this.muted || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    // Throttle: max 1 Tick pro 25ms.
+    if (t - (this._lastTickT || 0) < 0.025) return;
+    this._lastTickT = t;
+
+    const baseFreq = kind === 'power' ? 520 : 720;
+    const freq = baseFreq * (dir > 0 ? 1.05 : 0.95);
+    const osc = this.ctx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.value = freq;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.06, t + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.02);
+    osc.connect(g).connect(this.master);
+    osc.start(t);
+    osc.stop(t + 0.025);
+  }
+
   playRoundEnd() {
     if (this.muted || !this.ctx) return;
     const t = this.ctx.currentTime;
@@ -156,44 +207,17 @@ export class SoundManager {
     });
   }
 
-  // -- Hintergrund-Musik ------------------------------------------------------
+  // -- Hintergrund-Musik (Tech-House-Loop) -----------------------------------
 
   _startMusic() {
-    if (!this.ctx || this._musicSrc) return;
-    // Loopable Chip-Bass-Pattern.
-    const t = this.ctx.currentTime;
-    const dur = 8;
-    const buffer = this.ctx.createBuffer(1, this.ctx.sampleRate * dur, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    const sr = this.ctx.sampleRate;
-    const notes = [110, 165, 130, 196, 110, 165, 146, 220];
-    for (let i = 0; i < data.length; i++) {
-      const time = i / sr;
-      const beat = Math.floor((time / dur) * notes.length) % notes.length;
-      const f = notes[beat];
-      const phase = (time * f) % 1;
-      const env = Math.exp(-((time * 4) % 0.5) * 3);
-      data[i] = (phase < 0.5 ? 0.5 : -0.5) * env * 0.4;
-    }
-    const src = this.ctx.createBufferSource();
-    src.buffer = buffer;
-    src.loop = true;
-    const g = this.ctx.createGain();
-    g.gain.value = 0.1;
-    src.connect(g).connect(this.master);
-    src.start(t);
-    this._musicSrc = src;
-    this.musicGain = g;
+    if (!this.music) return;
+    if (this.muted) return;
+    this.music.start();
   }
 
   _stopMusic() {
-    try {
-      this._musicSrc?.stop();
-    } catch (e) {
-      // Bereits gestoppt — egal.
-    }
-    this._musicSrc = null;
-    this.musicGain = null;
+    if (!this.music) return;
+    this.music.stop();
   }
 
   _noiseSource(seconds) {

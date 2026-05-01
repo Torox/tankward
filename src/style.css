@@ -11,11 +11,16 @@ body,
   background: #0b1220;
 }
 
+/* dvh statt vh, damit dynamische Browser-UI (iOS-URL-Bar, Android-Geste-Leisten)
+   keine Inhalte abschneidet. Fallback fuer Browser ohne dvh: 100vh + safe-area. */
 #app {
   position: relative;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
+  /* Safe-Area-Padding nur fuers Layouten der absolut positionierten Touch-UI;
+     der Canvas selbst soll die volle Flaeche nutzen. */
 }
 
 #game-canvas {
@@ -68,9 +73,14 @@ body.has-touch .desktop-only {
 }
 
 /* Touch-Controls nur waehrend des Spiels (PLAYER_TURN/PROJECTILE_FLYING).
-   Game setzt body.in-game, wenn das HUD-Screen aktiv ist. */
+   Game setzt body.in-game, wenn das HUD-Screen aktiv ist.
+   safe-area-inset-bottom verhindert, dass FEUER/Waffe-Buttons hinter
+   der iOS-Home-Indicator-Leiste oder der Android-Gesten-Leiste verschwinden. */
 #touch-controls {
   display: none;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 body.has-touch.in-game #touch-controls {
   display: block;
@@ -79,6 +89,25 @@ body.has-touch.in-game #touch-controls {
   body.in-game #touch-controls {
     display: block;
   }
+}
+
+/* Mobile-Banner / Pause / Game-Over Modals: Padding ausserhalb der safe-area */
+@media (max-width: 720px) {
+  #screen-banner,
+  #screen-pause,
+  #screen-gameover,
+  #screen-shop {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* HUD oben respektiert iOS-Notch / Android-Statusbar */
+#screen-hud {
+  padding-top: env(safe-area-inset-top);
+}
+#hud-mobile {
+  top: max(8px, env(safe-area-inset-top));
 }
 
 /* Touch-Hint fadet nach kurzer Zeit aus. */

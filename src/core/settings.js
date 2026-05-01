@@ -7,6 +7,7 @@ const KEY = 'tankward.settings.v1';
 const DEFAULTS = {
   sound: true,
   music: false,
+  musicTrack: 0,
   numPlayers: 4,
   numHumans: 1,
   aiDifficulty: 'pro',

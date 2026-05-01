@@ -19,6 +19,11 @@ export class Renderer {
     this.shakeMaxTime = 0;
     this.resize();
     window.addEventListener('resize', () => this.resize());
+    // visualViewport reagiert auf Browser-UI-Aufklappen (iOS-URL-Bar etc.) — nicht
+    // jeder Browser feuert dabei `resize` aufs window, also auch hier hooken.
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', () => this.resize());
+    }
   }
 
   /**

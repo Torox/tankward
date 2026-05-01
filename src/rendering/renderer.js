@@ -444,12 +444,13 @@ export class Renderer {
     // Wind-Indikator ist ein HUD-Element (Screen-Space, nicht World-Space).
     this.applyScreenSpace();
     const ctx = this.ctx;
+    const isMobile = this.viewportW <= 720;
     const cx = this.viewportW / 2;
-    const pillW = this.viewportW <= 720 ? 130 : 180;
+    const pillW = isMobile ? 130 : 180;
     const pillH = 36;
-    // Immer unterhalb des oberen HUD-Streifens (das jetzt auf allen
-    // Plattformen oben sitzt).
-    const cy = 110;
+    // Unterhalb des oberen HUD-Streifens. Auf Mobile ist die HUD-Bar dicker
+    // (mehrzeilig mit Player-Pillen) — daher weiter nach unten.
+    const cy = isMobile ? 150 : 110;
     const textY = cy + 6;
     const arrowY = cy - 8;
     const maxArrow = isMobile ? 48 : 70;

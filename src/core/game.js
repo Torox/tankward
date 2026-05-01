@@ -1062,13 +1062,17 @@ export class Game {
       shooter.currentShotTrail = null;
     }
 
-    this.sound.playExplosion(w.blastRadius);
-    this.particles.explosion(impact.x, impact.y, w.blastRadius);
+    // Utility-Waffen (Dirt/Sonic/CRI) haben blastRadius=0 — Explosion-Sound und
+    // Particles wuerden auf 0 herumtanzen oder gar crashen (Audio-Ramp).
+    if (w.blastRadius > 0) {
+      this.sound.playExplosion(w.blastRadius);
+      this.particles.explosion(impact.x, impact.y, w.blastRadius);
+    }
 
     // Screen-Shake skaliert mit Blast-Radius (Mindeststaerke fuer alle).
     const shakeMag = w.shake?.magnitude ?? Math.min(8, w.blastRadius * 0.12);
     const shakeDur = w.shake?.duration ?? 0.18;
-    this.renderer.triggerShake(shakeMag, shakeDur);
+    if (shakeMag > 0) this.renderer.triggerShake(shakeMag, shakeDur);
 
     // Tote Tanks bekommen eine eigene Rauch-/Funkenwolke.
     for (const h of hits) {

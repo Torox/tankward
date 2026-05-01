@@ -125,10 +125,10 @@ export class AiController {
     // Tier 2 (Wind Master): immer wenn vorhanden
     const t = this.tank;
     const priority = [
-      'nuke', 'mirv', 'cri-large',
-      'driller', 'cri-medium',
+      'nuke', 'mirv', 'quake-large',
+      'driller', 'quake-medium',
       'dirt-explosive', 'heavy',
-      'cri-small', 'cluster', 'roller', 'sonic', 'napalm',
+      'quake-small', 'cluster', 'roller', 'sonic', 'napalm',
       'standard'
     ];
     const tier = this.character.weaponTier ?? 1;

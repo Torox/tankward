@@ -122,7 +122,7 @@ export const WEAPONS = {
     damage: 0,
     mass: 5,
     caseHardness: 0,
-    dirtFill: { radius: 25, height: 18 },
+    dirtFill: { radius: 50, height: 40 },
     color: '#a16207',
     icon: '▲',
     desc: 'Schüttet kleinen Erdhügel auf.'
@@ -135,10 +135,10 @@ export const WEAPONS = {
     damage: 0,
     mass: 8,
     caseHardness: 0,
-    dirtFill: { radius: 38, height: 30 },
+    dirtFill: { radius: 80, height: 65 },
     color: '#92400e',
     icon: '▲',
-    desc: 'Mittelgroßer Erdhügel.'
+    desc: 'Mittelgroßer Erdhügel — guter Sichtblock.'
   },
   'dirt-large': {
     id: 'dirt-large',
@@ -148,23 +148,23 @@ export const WEAPONS = {
     damage: 0,
     mass: 12,
     caseHardness: 0,
-    dirtFill: { radius: 55, height: 48 },
+    dirtFill: { radius: 120, height: 100 },
     color: '#78350f',
     icon: '▲',
-    desc: 'Großer Erdhügel — Bunker oder Sichtblock.'
+    desc: 'Massiver Erdwall — Bunker.'
   },
   'dirt-explosive': {
     id: 'dirt-explosive',
     name: 'Erdwurf explosiv',
     price: 1800,
-    blastRadius: 35,
-    damage: 20,
+    blastRadius: 50,
+    damage: 25,
     mass: 10,
     caseHardness: 0.4,
-    dirtFill: { radius: 70, height: 36 },
+    dirtFill: { radius: 140, height: 80 },
     color: '#dc2626',
     icon: '▲',
-    desc: 'Explosion + Erdwurf radial.'
+    desc: 'Explosion + massiver Erdwall radial.'
   },
   sonic: {
     id: 'sonic',
@@ -179,65 +179,65 @@ export const WEAPONS = {
     icon: '≈',
     desc: 'Kollabiert instabiles Terrain weltweit.'
   },
-  'cri-small': {
-    id: 'cri-small',
-    name: 'CRI klein',
+  'quake-small': {
+    id: 'quake-small',
+    name: 'Erdbeben klein',
     price: 900,
     blastRadius: 0,
     damage: 0,
     mass: 4,
     caseHardness: 0.2,
-    chainReact: {
-      initialRadius: 22,
-      hops: 6,
-      falloff: 0.85,
-      spreadX: 160,
-      spreadY: 60,
-      jitterDelay: 0.04
+    earthquake: {
+      initialRadius: 28,
+      hopsPerSide: 8,
+      stepDist: 30,
+      falloff: 0.92,
+      stepDelay: 0.05,
+      yJitter: 6
     },
     color: '#a78bfa',
-    icon: '⌬',
-    desc: 'Kettenreaktion — kleine Streuung.'
+    icon: '⌇',
+    desc: 'Kleines Erdbeben — Riss reißt nach beiden Seiten auf.'
   },
-  'cri-medium': {
-    id: 'cri-medium',
-    name: 'CRI mittel',
+  'quake-medium': {
+    id: 'quake-medium',
+    name: 'Erdbeben mittel',
     price: 1700,
     blastRadius: 0,
     damage: 0,
     mass: 5,
     caseHardness: 0.2,
-    chainReact: {
-      initialRadius: 28,
-      hops: 10,
-      falloff: 0.85,
-      spreadX: 220,
-      spreadY: 80,
-      jitterDelay: 0.05
+    earthquake: {
+      initialRadius: 36,
+      hopsPerSide: 14,
+      stepDist: 35,
+      falloff: 0.93,
+      stepDelay: 0.06,
+      yJitter: 8
     },
     color: '#8b5cf6',
-    icon: '⌬',
-    desc: 'Mittlere Kettenreaktion.'
+    icon: '⌇',
+    desc: 'Mittleres Erdbeben — Riss-Front mit langer Reichweite.'
   },
-  'cri-large': {
-    id: 'cri-large',
-    name: 'CRI groß',
+  'quake-large': {
+    id: 'quake-large',
+    name: 'Erdbeben groß',
     price: 2800,
     blastRadius: 0,
     damage: 0,
     mass: 6,
     caseHardness: 0.2,
-    chainReact: {
-      initialRadius: 34,
-      hops: 16,
-      falloff: 0.88,
-      spreadX: 300,
-      spreadY: 110,
-      jitterDelay: 0.06
+    earthquake: {
+      initialRadius: 44,
+      hopsPerSide: 22,
+      stepDist: 40,
+      falloff: 0.95,
+      stepDelay: 0.07,
+      yJitter: 10
     },
     color: '#6d28d9',
-    icon: '⌬',
-    desc: 'Großflächige Kettenreaktion.'
+    icon: '⌇',
+    desc: 'Großes Erdbeben — verheerender Riss durch das halbe Spielfeld.'
   },
   nuke: {
     id: 'nuke',
@@ -267,9 +267,9 @@ export const WEAPON_ORDER = [
   'dirt-large',
   'dirt-explosive',
   'sonic',
-  'cri-small',
-  'cri-medium',
-  'cri-large',
+  'quake-small',
+  'quake-medium',
+  'quake-large',
   'nuke'
 ];
 

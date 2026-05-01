@@ -1026,9 +1026,9 @@ export class Game {
     if (w.sonicWave) {
       this._sonicSweep(w.sonicWave);
       // Skip carve — sonic deals no terrain damage at impact, only collapses.
-    } else if (w.chainReact) {
-      this._scheduleChain(impact, w.chainReact);
-      // Skip default carve — _scheduleChain hat den initialen Carve schon erledigt.
+    } else if (w.earthquake) {
+      this._scheduleEarthquake(impact, w.earthquake);
+      // Skip default carve — _scheduleEarthquake erledigt initial+spread selbst.
     } else {
       this.terrain.carve(impact.x, impact.y, w.blastRadius);
       // Phase 2.1: Crumble-Effekt nach Krater. Bei 100 % immer geglaettet,
@@ -1123,27 +1123,37 @@ export class Game {
     this.renderer.triggerShake(4, 0.3);
   }
 
-  _scheduleChain(impact, cfg) {
-    // Initial Detonation am Aufprall.
+  /**
+   * Erdbeben-Mechanik: ein horizontaler Riss reisst von der Aufprallstelle
+   * nach LINKS und RECHTS auf. Pro Schritt ein Carve entlang der Oberflaeche
+   * im fixen Abstand (cfg.stepDist) — keine Random-Hops mehr. Der Radius
+   * verkleinert sich pro Schritt mit cfg.falloff. Resultat: ein klar
+   * sichtbarer Riss / Graben quer durchs Terrain (statt Streufeld).
+   */
+  _scheduleEarthquake(impact, cfg) {
+    // Initial-Detonation am Aufprall.
     this.terrain.carve(impact.x, impact.y, cfg.initialRadius);
     this.terrain.smoothCrater(impact.x, cfg.initialRadius, this.config.crumblePercent ?? 75);
     this.particles.explosion(impact.x, impact.y, cfg.initialRadius);
     this.sound.playExplosion(cfg.initialRadius);
 
-    // Chain-Hops queue
-    let r = cfg.initialRadius;
-    let prevX = impact.x;
-    for (let i = 0; i < cfg.hops; i++) {
-      r *= cfg.falloff;
-      if (r < 6) break;
-      const ox = (Math.random() - 0.5) * cfg.spreadX;
-      const cx = clamp(prevX + ox, 10, this.worldWidth - 10);
-      const cy = this.terrain.surfaceY(cx);
-      this.effects.push(new ChainHop({
-        x: cx, y: cy, radius: r,
-        delay: (i + 1) * cfg.jitterDelay
-      }));
-      prevX = cx;
+    // Riss reisst symmetrisch nach links und rechts auf.
+    for (const dir of [-1, 1]) {
+      let x = impact.x;
+      let r = cfg.initialRadius;
+      for (let step = 1; step <= cfg.hopsPerSide; step++) {
+        r *= cfg.falloff;
+        if (r < 6) break;
+        x += dir * cfg.stepDist;
+        if (x < 10 || x > this.worldWidth - 10) break;
+        const cy = this.terrain.surfaceY(x);
+        // Kleines vertikales Jitter, damit der Riss organisch aussieht.
+        const yJ = (Math.random() - 0.5) * (cfg.yJitter ?? 0);
+        this.effects.push(new ChainHop({
+          x, y: cy + yJ, radius: r,
+          delay: step * cfg.stepDelay
+        }));
+      }
     }
   }
 

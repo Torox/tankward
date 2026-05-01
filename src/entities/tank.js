@@ -65,15 +65,27 @@ export class Tank {
     this.turretAngle = clamp(this.turretAngle + delta, ANGLE_MIN, ANGLE_MAX);
   }
 
-  /** Stärke anpassen, geclamped. */
-  adjustPower(delta) {
-    this.power = clamp(this.power + delta, POWER_MIN, POWER_MAX);
+  /**
+   * Aktueller Power-Cap. Skaliert linear mit HP — voll geheilter Tank kann
+   * 100 Power schiessen, halb-toter nur 50.
+   * Mindestens 10 (sonst kann ein 1-HP-Tank gar nicht mehr schiessen, was die
+   * Runde unnoetig in die Laenge zoege).
+   */
+  get powerMax() {
+    return Math.max(10, Math.round(POWER_MAX * this.hp / this.maxHp));
   }
 
-  /** HP abziehen; setzt alive=false bei <= 0. */
+  /** Stärke anpassen, geclamped auf [0, powerMax]. */
+  adjustPower(delta) {
+    this.power = clamp(this.power + delta, POWER_MIN, this.powerMax);
+  }
+
+  /** HP abziehen; setzt alive=false bei <= 0. Clamped auch power. */
   takeDamage(amount) {
     this.hp = Math.max(0, this.hp - amount);
     if (this.hp <= 0) this.alive = false;
+    // Sinkt der Cap unter die aktuelle Power -> sofort runtersetzen.
+    if (this.power > this.powerMax) this.power = this.powerMax;
   }
 }
 

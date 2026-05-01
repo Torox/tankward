@@ -1243,7 +1243,7 @@ export class Game {
       if (active) {
         const flying = this.state === S.PROJECTILE_FLYING;
         const angleStr = `${Math.round(active.turretAngle)}°`;
-        const powerStr = `${Math.round(active.power)}`;
+        const powerStr = `${Math.round(active.power)}/${active.powerMax}`;
         const w = WEAPONS[active.selectedWeapon] || WEAPONS.standard;
         const stock = w.unlimited ? '∞' : active.inventory.get(w.id) ?? 0;
         const wTextLong = `${w.icon} ${w.name} ×${stock}`;

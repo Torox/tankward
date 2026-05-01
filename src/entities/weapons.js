@@ -166,6 +166,19 @@ export const WEAPONS = {
     icon: '▲',
     desc: 'Explosion + Erdwurf radial.'
   },
+  sonic: {
+    id: 'sonic',
+    name: 'Sonic Blaster',
+    price: 1400,
+    blastRadius: 0,
+    damage: 0,
+    mass: 2,
+    caseHardness: 0,
+    sonicWave: { smoothPercent: 100, sweepPasses: 3 },
+    color: '#22d3ee',
+    icon: '≈',
+    desc: 'Kollabiert instabiles Terrain weltweit.'
+  },
   nuke: {
     id: 'nuke',
     name: 'Atombombe',
@@ -193,6 +206,7 @@ export const WEAPON_ORDER = [
   'dirt-medium',
   'dirt-large',
   'dirt-explosive',
+  'sonic',
   'nuke'
 ];
 

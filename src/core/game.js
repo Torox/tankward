@@ -1022,10 +1022,15 @@ export class Game {
   }
 
   _detonate(p, impact, w, opts = {}) {
-    this.terrain.carve(impact.x, impact.y, w.blastRadius);
-    // Phase 2.1: Crumble-Effekt nach Krater. Bei 100 % immer geglaettet,
-    // bei 0 % nie — sichtbarer Unterschied an der Krater-Kontur.
-    this.terrain.smoothCrater(impact.x, w.blastRadius, this.config.crumblePercent ?? 75);
+    if (w.sonicWave) {
+      this._sonicSweep(w.sonicWave);
+      // Skip carve — sonic deals no terrain damage at impact, only collapses.
+    } else {
+      this.terrain.carve(impact.x, impact.y, w.blastRadius);
+      // Phase 2.1: Crumble-Effekt nach Krater. Bei 100 % immer geglaettet,
+      // bei 0 % nie — sichtbarer Unterschied an der Krater-Kontur.
+      this.terrain.smoothCrater(impact.x, w.blastRadius, this.config.crumblePercent ?? 75);
+    }
     const hits = applyBlast(impact, this.tanks, w.blastRadius, w.damage);
 
     // Kinetik-Bonus: Direkttreffer-Tank bekommt zusaetzlichen Schaden basierend
@@ -1095,6 +1100,19 @@ export class Game {
         if (dmg > 0) t.takeDamage(dmg);
       }
     }
+  }
+
+  _sonicSweep(cfg) {
+    const W = this.terrain.width;
+    for (let pass = 0; pass < cfg.sweepPasses; pass++) {
+      for (let k = 0; k < 5; k++) {
+        const cx = ((k + 0.5) / 5) * W;
+        this.terrain.smoothCrater(cx, W / 8, cfg.smoothPercent);
+      }
+    }
+    // Visueller Effekt
+    this.particles.explosion(this.worldWidth / 2, this.worldHeight * 0.4, 60);
+    this.renderer.triggerShake(4, 0.3);
   }
 
   /**

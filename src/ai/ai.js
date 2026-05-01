@@ -127,7 +127,7 @@ export class AiController {
     const priority = [
       'nuke', 'mirv', 'driller',
       'dirt-explosive', 'heavy',
-      'cluster', 'roller', 'napalm',
+      'cluster', 'roller', 'sonic', 'napalm',
       'standard'
     ];
     const tier = this.character.weaponTier ?? 1;

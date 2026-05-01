@@ -115,6 +115,32 @@ export class Terrain {
   }
 
   /**
+   * Inverse of carve: deposits dirt as a hump centered at (cx, cy).
+   * For each column in [cx-r .. cx+r], a chord-shaped pile is added to the
+   * surface — the higher the chord at this column, the more the surface rises.
+   *
+   * Heightmap convention: smaller y = higher. Surface rises = heights[x] decreases.
+   *
+   * @param {number} cx world x
+   * @param {number} cy world y of hump CENTER (anchor; surface caps at cy - h)
+   * @param {number} r radius
+   * @param {number} h max additional height at center (in px)
+   */
+  heap(cx, cy, r, h = r * 0.7) {
+    const xMin = Math.max(0, Math.floor(cx - r));
+    const xMax = Math.min(this.width - 1, Math.ceil(cx + r));
+    const r2 = r * r;
+    const cap = Math.max(40, cy - h);
+    for (let x = xMin; x <= xMax; x++) {
+      const dx = x - cx;
+      const chord = Math.sqrt(Math.max(0, r2 - dx * dx));
+      const lift = (chord / r) * h;
+      const newY = Math.max(cap, this.heights[x] - lift);
+      this.heights[x] = newY;
+    }
+  }
+
+  /**
    * Phase 2.1: Crumble-Effekt nach einem Krater. Zieht die Kanten des Kraters
    * weicher, wenn die Wuerfel-Probe gegen `crumblePercent` aufgeht.
    *

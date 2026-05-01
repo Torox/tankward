@@ -114,6 +114,58 @@ export const WEAPONS = {
     icon: '✸',
     desc: 'Spaltet sich am Apex in 5 Sprengköpfe.'
   },
+  'dirt-small': {
+    id: 'dirt-small',
+    name: 'Erdwurf klein',
+    price: 300,
+    blastRadius: 0,
+    damage: 0,
+    mass: 5,
+    caseHardness: 0,
+    dirtFill: { radius: 25, height: 18 },
+    color: '#a16207',
+    icon: '▲',
+    desc: 'Schüttet kleinen Erdhügel auf.'
+  },
+  'dirt-medium': {
+    id: 'dirt-medium',
+    name: 'Erdwurf mittel',
+    price: 600,
+    blastRadius: 0,
+    damage: 0,
+    mass: 8,
+    caseHardness: 0,
+    dirtFill: { radius: 38, height: 30 },
+    color: '#92400e',
+    icon: '▲',
+    desc: 'Mittelgroßer Erdhügel.'
+  },
+  'dirt-large': {
+    id: 'dirt-large',
+    name: 'Erdwurf groß',
+    price: 1100,
+    blastRadius: 0,
+    damage: 0,
+    mass: 12,
+    caseHardness: 0,
+    dirtFill: { radius: 55, height: 48 },
+    color: '#78350f',
+    icon: '▲',
+    desc: 'Großer Erdhügel — Bunker oder Sichtblock.'
+  },
+  'dirt-explosive': {
+    id: 'dirt-explosive',
+    name: 'Erdwurf explosiv',
+    price: 1800,
+    blastRadius: 35,
+    damage: 20,
+    mass: 10,
+    caseHardness: 0.4,
+    dirtFill: { radius: 70, height: 36 },
+    color: '#dc2626',
+    icon: '▲',
+    desc: 'Explosion + Erdwurf radial.'
+  },
   nuke: {
     id: 'nuke',
     name: 'Atombombe',
@@ -137,6 +189,10 @@ export const WEAPON_ORDER = [
   'roller',
   'driller',
   'mirv',
+  'dirt-small',
+  'dirt-medium',
+  'dirt-large',
+  'dirt-explosive',
   'nuke'
 ];
 

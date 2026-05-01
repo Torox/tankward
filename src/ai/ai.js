@@ -124,7 +124,12 @@ export class AiController {
     // Tier 1 (Lobber/Rifleman/...): mittlere Wahrscheinlichkeit
     // Tier 2 (Wind Master): immer wenn vorhanden
     const t = this.tank;
-    const priority = ['nuke', 'mirv', 'driller', 'heavy', 'cluster', 'roller', 'napalm', 'standard'];
+    const priority = [
+      'nuke', 'mirv', 'driller',
+      'dirt-explosive', 'heavy',
+      'cluster', 'roller', 'napalm',
+      'standard'
+    ];
     const tier = this.character.weaponTier ?? 1;
     for (const id of priority) {
       if (canFire(t, id)) {

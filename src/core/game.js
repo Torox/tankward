@@ -1069,6 +1069,32 @@ export class Game {
     }
 
     if (w.napalm) this._spawnNapalm(impact, w.napalm);
+
+    // Dirt-Familie: schuettet Erde an die Aufprallstelle. Funktioniert
+    // parallel zu carve (dirt-explosive: Krater UND Erdwall).
+    if (w.dirtFill) this._applyDirtFill(impact, w.dirtFill);
+  }
+
+  _applyDirtFill(impact, cfg) {
+    this.terrain.heap(impact.x, impact.y, cfg.radius, cfg.height);
+    // Particles in Erd-Braun fuer visuelles Feedback
+    this.particles.explosion(impact.x, impact.y, cfg.radius * 0.5);
+    this._applyDirtCrush(impact, cfg);
+  }
+
+  _applyDirtCrush(impact, cfg) {
+    for (const t of this.tanks) {
+      if (!t.alive) continue;
+      if (Math.abs(t.x - impact.x) > cfg.radius * 1.2) continue;
+      const newSurf = this.terrain.surfaceY(t.x);
+      // TANK_BODY_HEIGHT importiert aus tank.js (siehe top of game.js)
+      const tankTop = t.y - 12 - 4 - 8; // body + tracks + turret approx
+      if (newSurf < tankTop) {
+        const buryDepth = Math.min(20, tankTop - newSurf);
+        const dmg = Math.round(buryDepth * 0.5);
+        if (dmg > 0) t.takeDamage(dmg);
+      }
+    }
   }
 
   /**

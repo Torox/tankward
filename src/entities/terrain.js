@@ -97,10 +97,18 @@ export class Terrain {
     for (let x = xMin; x <= xMax; x++) {
       const dx = x - cx;
       const chord = Math.sqrt(Math.max(0, r2 - dx * dx));
-      const top = cy - chord;
       const bot = cy + chord;
       const surf = this.heights[x];
-      if (surf >= top && surf <= bot) {
+      // Krater hinterlaesst IMMER eine sichtbare Senke an der Oberflaeche.
+      // Drei Faelle:
+      //   surf >= top, surf <= bot: klassischer Surface-Treffer
+      //                             -> Oberflaeche faellt auf Krater-Boden.
+      //   surf < top:               Explosion im Erdreich oder hinter Cliff
+      //                             -> Erde ueber dem Krater kollabiert hinein,
+      //                                Oberflaeche faellt ebenfalls auf bot.
+      //   surf > bot:               Explosion in der Luft (untypisch)
+      //                             -> keine Aenderung.
+      if (surf <= bot) {
         this.heights[x] = Math.min(this.height - 1, bot);
       }
     }
@@ -120,15 +128,17 @@ export class Terrain {
    */
   smoothCrater(cx, r, percent) {
     if (percent <= 0) return;
-    if (percent < 100 && Math.random() * 100 > percent) return;
-    // Glaettungs-Range etwas weiter als Krater (auch die Boeschungen daneben).
-    const range = Math.ceil(r * 1.4);
+    // Anzahl der 3-Tap-Smoothing-Passes skaliert linear mit percent.
+    // Deterministisch -> sichtbarer Gradient zwischen 0 % und 100 %.
+    //   25 %  -> 1 Pass  (leichte Glaettung)
+    //   50 %  -> 2 Passes
+    //   75 %  -> 3 Passes
+    //  100 %  -> 4 Passes (deutlich abgerundet)
+    const passes = Math.max(1, Math.round(percent / 25));
+    const range = Math.ceil(r * 1.5);
     const xMin = Math.max(1, Math.floor(cx - range));
     const xMax = Math.min(this.width - 2, Math.ceil(cx + range));
-    // 2 Passes 3-Tap-Smoothing reichen fuer einen sichtbaren Unterschied,
-    // ohne die Heightmap zu sehr zu zermatschen.
-    const PASSES = 2;
-    for (let pass = 0; pass < PASSES; pass++) {
+    for (let pass = 0; pass < passes; pass++) {
       const next = new Float32Array(xMax - xMin + 1);
       for (let x = xMin; x <= xMax; x++) {
         const a = this.heights[x - 1];

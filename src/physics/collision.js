@@ -85,9 +85,20 @@ export function applyBlast(impact, tanks, blastRadius, baseDamage) {
 }
 
 /**
+ * Sturzschaden-Tuning: ab welcher Falldistanz beginnt Schaden, und wie viel
+ * HP pro Pixel. Aus 30 px Sturz -> 0 HP, aus 80 px -> ~12 HP, aus 150 px -> ~30 HP.
+ */
+const FALL_DAMAGE_THRESHOLD_PX = 30;
+const FALL_DAMAGE_PER_PX = 0.25;
+
+/**
  * Nach Terrain-Aenderung: Panzer fallen auf die neue Oberflaeche, wenn diese
  * unter dem alten y liegt (Krater unter Panzer). Steigt das Terrain (passiert
  * normalerweise nicht in einem Krater-Modell), bleibt der Panzer wo er ist.
+ *
+ * Sturz > FALL_DAMAGE_THRESHOLD_PX wirkt Schaden — Tank-Wars-3.2-Mechanik.
+ * Der Crumble-/CRI-Combo (Boden wegsprengen, Tank stuerzen) bekommt damit
+ * echtes taktisches Gewicht statt nur kosmetischem Re-Settle.
  *
  * @param {import('../entities/tank.js').Tank[]} tanks
  * @param {import('../entities/terrain.js').Terrain} terrain
@@ -96,7 +107,14 @@ export function settleTanks(tanks, terrain) {
   for (const tank of tanks) {
     if (!tank.alive) continue;
     const newY = terrain.surfaceY(tank.x);
-    if (newY > tank.y) tank.y = newY;
+    if (newY > tank.y) {
+      const fallDist = newY - tank.y;
+      tank.y = newY;
+      if (fallDist > FALL_DAMAGE_THRESHOLD_PX) {
+        const dmg = Math.round((fallDist - FALL_DAMAGE_THRESHOLD_PX) * FALL_DAMAGE_PER_PX);
+        if (dmg > 0) tank.takeDamage(dmg);
+      }
+    }
     // Faellt der Panzer aus dem Frame -> tot.
     if (tank.y >= terrain.height - 2) {
       tank.takeDamage(tank.hp);

@@ -1124,34 +1124,38 @@ export class Game {
   }
 
   /**
-   * Erdbeben-Mechanik: ein horizontaler Riss reisst von der Aufprallstelle
-   * nach LINKS und RECHTS auf. Pro Schritt ein Carve entlang der Oberflaeche
-   * im fixen Abstand (cfg.stepDist) — keine Random-Hops mehr. Der Radius
-   * verkleinert sich pro Schritt mit cfg.falloff. Resultat: ein klar
-   * sichtbarer Riss / Graben quer durchs Terrain (statt Streufeld).
+   * Erdbeben-Mechanik: NACH dem Initial-Knall oeffnen sich SCHMALE TIEFE
+   * RISSE in Sequenz vom Epizentrum nach beiden Seiten. Jeder Riss ist ein
+   * narrow carve (cfg.crackRadius) deutlich UNTER der Oberflaeche
+   * (cfg.crackDepth) — die Spalte fallen tief ein, Nachbarspalten bleiben
+   * nah an Original-Hoehe -> visuell wie Erdbebenspalten / Fissuren.
+   *
+   * Per-Riss-Shake plus zeitversetztes Oeffnen vermitteln das Beben-Feeling.
    */
   _scheduleEarthquake(impact, cfg) {
-    // Initial-Detonation am Aufprall.
+    // Initial-Detonation am Aufprall mit grossem Anfangsknall.
     this.terrain.carve(impact.x, impact.y, cfg.initialRadius);
     this.terrain.smoothCrater(impact.x, cfg.initialRadius, this.config.crumblePercent ?? 75);
     this.particles.explosion(impact.x, impact.y, cfg.initialRadius);
     this.sound.playExplosion(cfg.initialRadius);
+    // Initial-Schock: kraeftiger als ein normaler Schuss.
+    this.renderer.triggerShake((cfg.shakePerCrack ?? 4) * 2.5, 0.5);
 
-    // Riss reisst symmetrisch nach links und rechts auf.
+    // Risse oeffnen sich nacheinander zu beiden Seiten.
     for (const dir of [-1, 1]) {
-      let x = impact.x;
-      let r = cfg.initialRadius;
-      for (let step = 1; step <= cfg.hopsPerSide; step++) {
-        r *= cfg.falloff;
-        if (r < 6) break;
-        x += dir * cfg.stepDist;
+      for (let step = 1; step <= cfg.cracks; step++) {
+        const x = impact.x + dir * step * cfg.crackSpacing;
         if (x < 10 || x > this.worldWidth - 10) break;
-        const cy = this.terrain.surfaceY(x);
-        // Kleines vertikales Jitter, damit der Riss organisch aussieht.
-        const yJ = (Math.random() - 0.5) * (cfg.yJitter ?? 0);
+        const surf = this.terrain.surfaceY(x);
+        // cy = Mittelpunkt des Risses tief unter der Oberflaeche.
+        // carve hinterlaesst eine schmale Spalte vom Surface bis cy + radius.
+        const cy = surf + cfg.crackDepth;
         this.effects.push(new ChainHop({
-          x, y: cy + yJ, radius: r,
-          delay: step * cfg.stepDelay
+          x, y: cy, radius: cfg.crackRadius,
+          delay: step * cfg.stepDelay,
+          shake: cfg.shakePerCrack ?? 3,
+          // Risse bleiben SCHARF — kein Smoothing.
+          noSmooth: true
         }));
       }
     }
@@ -1303,12 +1307,15 @@ export class Game {
       if (hits.length) {
         // Napalm-Schaden ist anonym — niemand bekommt Credits dafuer (Designentscheidung).
       }
-      // ChainHop: einmal triggert, fuehrt Carve aus
+      // ChainHop: einmal triggert, fuehrt Carve aus + Shake fuer Erdbeben-Feeling.
       if (e instanceof ChainHop && e.fired && e.alive) {
         this.terrain.carve(e.x, e.y, e.radius);
-        this.terrain.smoothCrater(e.x, e.radius, this.config.crumblePercent ?? 75);
-        this.particles.explosion(e.x, e.y, e.radius);
-        this.sound.playExplosion(e.radius);
+        // Erdbeben-Risse bleiben SCHARF (noSmooth) — andere Hops glaetten.
+        if (!e.noSmooth) {
+          this.terrain.smoothCrater(e.x, e.radius, this.config.crumblePercent ?? 75);
+        }
+        this.particles.explosion(e.x, e.y, e.radius * 0.6);
+        if (e.shake > 0) this.renderer.triggerShake(e.shake, 0.15);
         e.alive = false;
       }
     }

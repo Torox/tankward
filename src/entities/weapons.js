@@ -187,17 +187,20 @@ export const WEAPONS = {
     damage: 0,
     mass: 4,
     caseHardness: 0.2,
+    // Erdbeben = schmale tiefe Risse in Sequenz, nicht ein zusammenhaengender Graben.
+    // Die Risse oeffnen sich nacheinander weiter weg vom Epizentrum.
     earthquake: {
-      initialRadius: 28,
-      hopsPerSide: 8,
-      stepDist: 30,
-      falloff: 0.92,
-      stepDelay: 0.05,
-      yJitter: 6
+      initialRadius: 32,        // Initialkrater am Aufprall
+      cracks: 6,                 // Anzahl Risse pro Seite
+      crackSpacing: 70,          // Abstand zwischen Rissen (px)
+      crackRadius: 10,           // Schmale Rissbreite
+      crackDepth: 35,            // Tiefe unter der Oberflaeche
+      stepDelay: 0.06,           // Zeitversatz pro Riss
+      shakePerCrack: 4.0
     },
     color: '#a78bfa',
     icon: '⌇',
-    desc: 'Kleines Erdbeben — Riss reißt nach beiden Seiten auf.'
+    desc: 'Erdbeben — Risse öffnen sich vom Epizentrum aus.'
   },
   'quake-medium': {
     id: 'quake-medium',
@@ -208,16 +211,17 @@ export const WEAPONS = {
     mass: 5,
     caseHardness: 0.2,
     earthquake: {
-      initialRadius: 36,
-      hopsPerSide: 14,
-      stepDist: 35,
-      falloff: 0.93,
-      stepDelay: 0.06,
-      yJitter: 8
+      initialRadius: 42,
+      cracks: 10,
+      crackSpacing: 80,
+      crackRadius: 12,
+      crackDepth: 50,
+      stepDelay: 0.07,
+      shakePerCrack: 5.0
     },
     color: '#8b5cf6',
     icon: '⌇',
-    desc: 'Mittleres Erdbeben — Riss-Front mit langer Reichweite.'
+    desc: 'Mittleres Erdbeben — tiefere Risse über größere Reichweite.'
   },
   'quake-large': {
     id: 'quake-large',
@@ -228,16 +232,17 @@ export const WEAPONS = {
     mass: 6,
     caseHardness: 0.2,
     earthquake: {
-      initialRadius: 44,
-      hopsPerSide: 22,
-      stepDist: 40,
-      falloff: 0.95,
-      stepDelay: 0.07,
-      yJitter: 10
+      initialRadius: 52,
+      cracks: 16,
+      crackSpacing: 90,
+      crackRadius: 14,
+      crackDepth: 70,
+      stepDelay: 0.08,
+      shakePerCrack: 6.0
     },
     color: '#6d28d9',
     icon: '⌇',
-    desc: 'Großes Erdbeben — verheerender Riss durch das halbe Spielfeld.'
+    desc: 'Großes Erdbeben — verheerende Risse durch das halbe Spielfeld.'
   },
   nuke: {
     id: 'nuke',

@@ -760,20 +760,28 @@ export class Game {
       kineticBonus = computeKineticBonus(p, w);
     }
 
-    // Phase 1.2: Penetration. Bei Terrain-Treffer mit hoher kinetischer Energie
-    // bohrt sich die Granate ein, statt sofort zu detonieren — kann durch
-    // Huegel hindurchschlagen und auf der anderen Seite explodieren.
+    // Phase 1.2/1.6: Penetration NUR am Muendungsbereich. Ein normaler Schuss
+    // kann sich beim Verlassen des Rohrs in nahes Erdreich bohren (z. B. wenn
+    // der Tank den Hang anvisiert) — bohrt ein Stueck weit und detoniert dann
+    // im Boden. Spaetere Aufschlaege (nach Flug durch die Luft) detonieren
+    // immer sofort. Spezialwaffen mit pierceAlways (z. B. Laser) sind exempt.
     if (impact.type === 'terrain' && p.mode === 'flying') {
-      const pierceDist = computePierceDistance(p, w);
-      if (pierceDist >= 8) {
-        p.mode = 'piercing';
-        p.pierceRemaining = pierceDist;
-        p.x = impact.x;
-        p.y = impact.y;
-        // Velocity beim Eintauchen reduzieren — nicht stoppen, aber abbremsen.
-        p.vx *= 0.7;
-        p.vy *= 0.7;
-        return;
+      const distFromMuzzle = Math.hypot(p.x - p.spawnX, p.y - p.spawnY);
+      const nearMuzzle = distFromMuzzle < 60;
+      const allowPierce = w.pierceAlways || (nearMuzzle && !p.hasPierced);
+      if (allowPierce) {
+        const pierceDist = computePierceDistance(p, w);
+        if (pierceDist >= 8) {
+          p.mode = 'piercing';
+          p.pierceRemaining = pierceDist;
+          p.hasPierced = true; // einmaliges Privileg verbraucht
+          p.x = impact.x;
+          p.y = impact.y;
+          // Velocity beim Eintauchen reduzieren — nicht stoppen, aber abbremsen.
+          p.vx *= 0.7;
+          p.vy *= 0.7;
+          return;
+        }
       }
     }
 

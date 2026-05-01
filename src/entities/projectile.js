@@ -35,6 +35,11 @@ export class Projectile {
     this.mode = 'flying';
     /** Verbleibende Penetrations-Distanz (Phase 1.2). */
     this.pierceRemaining = 0;
+    /** Spawn-Position — fuer "Pierce nur am Muendungsbereich"-Check (Phase 1.6). */
+    this.spawnX = x;
+    this.spawnY = y;
+    /** Einmal gepierced -> kein zweites Mal moeglich. */
+    this.hasPierced = false;
     /** Splits passieren nur einmal pro Projektil. */
     this.didSplit = false;
     /** True, wenn dieses Projektil eine Submunition ist (Streubombe/MIRV-Kind). */

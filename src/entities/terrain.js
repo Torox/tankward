@@ -105,4 +105,40 @@ export class Terrain {
       }
     }
   }
+
+  /**
+   * Phase 2.1: Crumble-Effekt nach einem Krater. Zieht die Kanten des Kraters
+   * weicher, wenn die Wuerfel-Probe gegen `crumblePercent` aufgeht.
+   *
+   * Bei 100 %: jeder Krater wird geglaettet -> sanfte, abgerundete Kerben.
+   * Bei 0 %: kein Smoothing -> harte, kantige Kraeter (Cartoon-Stil).
+   * Dazwischen: stochastisch.
+   *
+   * @param {number} cx
+   * @param {number} r       Original-Krater-Radius
+   * @param {number} percent 0..100
+   */
+  smoothCrater(cx, r, percent) {
+    if (percent <= 0) return;
+    if (percent < 100 && Math.random() * 100 > percent) return;
+    // Glaettungs-Range etwas weiter als Krater (auch die Boeschungen daneben).
+    const range = Math.ceil(r * 1.4);
+    const xMin = Math.max(1, Math.floor(cx - range));
+    const xMax = Math.min(this.width - 2, Math.ceil(cx + range));
+    // 2 Passes 3-Tap-Smoothing reichen fuer einen sichtbaren Unterschied,
+    // ohne die Heightmap zu sehr zu zermatschen.
+    const PASSES = 2;
+    for (let pass = 0; pass < PASSES; pass++) {
+      const next = new Float32Array(xMax - xMin + 1);
+      for (let x = xMin; x <= xMax; x++) {
+        const a = this.heights[x - 1];
+        const b = this.heights[x];
+        const c = this.heights[x + 1];
+        next[x - xMin] = (a + 2 * b + c) / 4;
+      }
+      for (let x = xMin; x <= xMax; x++) {
+        this.heights[x] = next[x - xMin];
+      }
+    }
+  }
 }

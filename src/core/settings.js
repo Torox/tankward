@@ -14,8 +14,11 @@ const DEFAULTS = {
   bestOf: 3,
   worldSize: 'mittel',
   // Einstellungen-Submenue:
-  maxWind: 10,        // Wind-Range (-max..+max), 0 = kein Wind
-  startCredits: 0     // Anfangsgeld pro Tank
+  maxWind: 10,             // Legacy-Slider (-max..+max) — bleibt fuer Backward-Compat
+  windStage: 'normal',     // Phase 2.3: off|mild|normal|strong|gale|random
+  wallMode: 'off',         // Phase 2.2: off|wrap|sticky|elastic|random
+  crumblePercent: 75,      // Phase 2.1: 0..100 — Wahrscheinlichkeit, dass Krater glattgezogen wird
+  startCredits: 0          // Anfangsgeld pro Tank
 };
 
 let cache = null;

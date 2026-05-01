@@ -193,12 +193,34 @@ app.innerHTML = `
           </select>
         </label>
         <label class="flex flex-col gap-1">
-          <span class="text-white/70">Wind-Range</span>
-          <select id="set-max-wind" class="bg-tw-bg border border-white/20 rounded px-2 py-2 text-white">
-            <option value="0">Windstill</option>
-            <option value="5">Mild (±5)</option>
-            <option value="10" selected>Normal (±10)</option>
-            <option value="15">Stürmisch (±15)</option>
+          <span class="text-white/70">Wind</span>
+          <select id="set-wind-stage" class="bg-tw-bg border border-white/20 rounded px-2 py-2 text-white">
+            <option value="off">Aus</option>
+            <option value="mild">Mild</option>
+            <option value="normal" selected>Normal</option>
+            <option value="strong">Stark</option>
+            <option value="gale">Sturm (mit Böen)</option>
+            <option value="random">Zufall pro Runde</option>
+          </select>
+        </label>
+        <label class="flex flex-col gap-1">
+          <span class="text-white/70">Bande</span>
+          <select id="set-wall-mode" class="bg-tw-bg border border-white/20 rounded px-2 py-2 text-white">
+            <option value="off" selected>Aus (Schuss verloren)</option>
+            <option value="wrap">Wrap (links↔rechts)</option>
+            <option value="sticky">Bounce mild (50% Verlust)</option>
+            <option value="elastic">Bounce voll</option>
+            <option value="random">Zufall pro Runde</option>
+          </select>
+        </label>
+        <label class="flex flex-col gap-1">
+          <span class="text-white/70">Crumble (Krater glätten)</span>
+          <select id="set-crumble" class="bg-tw-bg border border-white/20 rounded px-2 py-2 text-white">
+            <option value="0">0 % (scharfe Kanten)</option>
+            <option value="25">25 %</option>
+            <option value="50">50 %</option>
+            <option value="75" selected>75 %</option>
+            <option value="100">100 % (immer glatt)</option>
           </select>
         </label>
         <label class="flex flex-col gap-1">

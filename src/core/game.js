@@ -40,10 +40,22 @@ const DEFAULT_CONFIG = {
   numHumans: 1,                    // erster Slot ist Mensch, Rest KI
   aiDifficulty: DIFFICULTY.pro,    // 'beginner' | 'pro' | 'expert'
   bestOf: 3,
-  worldSize: 'mittel',             // klein | mittel | gross | riesig (jetzt im Settings-Submenue)
-  maxWind: 10,                     // Wind-Range +/-
+  worldSize: 'mittel',             // klein | mittel | gross | riesig
+  maxWind: 10,                     // Legacy fuer Backward-Compat
+  windStage: 'normal',             // off|mild|normal|strong|gale|random (Phase 2.3)
+  wallMode: 'off',                 // off|wrap|sticky|elastic|random (Phase 2.2)
+  crumblePercent: 75,              // 0..100 (Phase 2.1)
   startCredits: 0                  // Anfangsgeld
 };
+
+// Phase 2.3: Wind-Stufen-Mapping. Maximaler Absolutwert je Stufe.
+const WIND_STAGE_MAX = {
+  off: 0, mild: 5, normal: 10, strong: 18, gale: 25
+};
+const WIND_STAGE_KEYS = ['off', 'mild', 'normal', 'strong', 'gale'];
+
+// Phase 2.2: Walls-Modi-Liste fuer Random-Auswahl.
+const WALL_MODE_KEYS = ['off', 'wrap', 'sticky', 'elastic'];
 const PLAYER_NAMES = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10'];
 // Credit-Skalierung (Stand v1.1): so dass ein durchschnittlicher Sieg in einer
 // Runde fuer eine guenstige Waffe reicht, und ueber 2-3 Runden auch fuer eine
@@ -108,7 +120,9 @@ export class Game {
       settings: document.getElementById('screen-settings'),
       btnOpenSettings: document.getElementById('btn-open-settings'),
       btnCloseSettings: document.getElementById('btn-close-settings'),
-      setMaxWind: document.getElementById('set-max-wind'),
+      setWindStage: document.getElementById('set-wind-stage'),
+      setWallMode: document.getElementById('set-wall-mode'),
+      setCrumble: document.getElementById('set-crumble'),
       setStartCredits: document.getElementById('set-start-credits'),
       setWorldSizeSettings: document.getElementById('set-world-size'),
       // Sound-Toggles
@@ -133,6 +147,9 @@ export class Game {
       bestOf: this.settings.bestOf,
       worldSize: this.settings.worldSize ?? DEFAULT_CONFIG.worldSize,
       maxWind: this.settings.maxWind ?? DEFAULT_CONFIG.maxWind,
+      windStage: this.settings.windStage ?? DEFAULT_CONFIG.windStage,
+      wallMode: this.settings.wallMode ?? DEFAULT_CONFIG.wallMode,
+      crumblePercent: this.settings.crumblePercent ?? DEFAULT_CONFIG.crumblePercent,
       startCredits: this.settings.startCredits ?? DEFAULT_CONFIG.startCredits
     };
 
@@ -223,7 +240,9 @@ export class Game {
     this.el.setupNumPlayers?.addEventListener('change', () => this._refreshNumHumansOptions());
 
     // Settings-Submenue verkabeln.
-    if (this.el.setMaxWind) this.el.setMaxWind.value = String(this.config.maxWind);
+    if (this.el.setWindStage) this.el.setWindStage.value = this.config.windStage;
+    if (this.el.setWallMode) this.el.setWallMode.value = this.config.wallMode;
+    if (this.el.setCrumble) this.el.setCrumble.value = String(this.config.crumblePercent);
     if (this.el.setStartCredits) this.el.setStartCredits.value = String(this.config.startCredits);
     if (this.el.setWorldSizeSettings) this.el.setWorldSizeSettings.value = this.config.worldSize;
 
@@ -270,14 +289,20 @@ export class Game {
   /** Liest die Werte des Einstellungen-Subscreens und persistiert sie. */
   _saveSettingsForm() {
     const ws = this.el.setWorldSizeSettings?.value ?? 'mittel';
-    const mw = parseInt(this.el.setMaxWind?.value ?? '10', 10);
+    const stage = this.el.setWindStage?.value ?? 'normal';
+    const wall = this.el.setWallMode?.value ?? 'off';
+    const crumble = parseInt(this.el.setCrumble?.value ?? '75', 10);
     const sc = parseInt(this.el.setStartCredits?.value ?? '0', 10);
     this.config.worldSize = CONFIG.world.presets[ws] ? ws : 'mittel';
-    this.config.maxWind = clamp(mw, 0, 20);
+    this.config.windStage = ['off','mild','normal','strong','gale','random'].includes(stage) ? stage : 'normal';
+    this.config.wallMode = ['off','wrap','sticky','elastic','random'].includes(wall) ? wall : 'off';
+    this.config.crumblePercent = clamp(crumble, 0, 100);
     this.config.startCredits = clamp(sc, 0, 5000);
     this.settings = saveSettings({
       worldSize: this.config.worldSize,
-      maxWind: this.config.maxWind,
+      windStage: this.config.windStage,
+      wallMode: this.config.wallMode,
+      crumblePercent: this.config.crumblePercent,
       startCredits: this.config.startCredits
     });
   }
@@ -872,6 +897,9 @@ export class Game {
 
   _detonate(p, impact, w, opts = {}) {
     this.terrain.carve(impact.x, impact.y, w.blastRadius);
+    // Phase 2.1: Crumble-Effekt nach Krater. Bei 100 % immer geglaettet,
+    // bei 0 % nie — sichtbarer Unterschied an der Krater-Kontur.
+    this.terrain.smoothCrater(impact.x, w.blastRadius, this.config.crumblePercent ?? 75);
     const hits = applyBlast(impact, this.tanks, w.blastRadius, w.damage);
 
     // Kinetik-Bonus: Direkttreffer-Tank bekommt zusaetzlichen Schaden basierend

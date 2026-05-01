@@ -99,6 +99,7 @@ export class Game {
       zoomLabel: document.getElementById('zoom-label'),
       dpadAngle: document.getElementById('dpad-angle'),
       dpadPower: document.getElementById('dpad-power'),
+      ctrlWeaponName: document.getElementById('ctrl-weapon-name'),
       // Pause
       pause: document.getElementById('screen-pause'),
       btnResume: document.getElementById('btn-resume'),
@@ -1270,9 +1271,13 @@ export class Game {
           this.el.hudWeaponMobile.textContent = wTextShort;
           this.el.hudWeaponMobile.style.color = w.color || '#fff';
         }
-        // D-Pad-Anzeige (Winkel/Power neben den Pfeil-Buttons).
+        // D-Pad-Anzeige (Legacy — falls noch im DOM, wird aktualisiert).
         if (this.el.dpadAngle) this.el.dpadAngle.textContent = angleStr;
         if (this.el.dpadPower) this.el.dpadPower.textContent = powerStr;
+        // Bedienpanel: Waffenname auf dem Cycle-Button live zeigen.
+        if (this.el.ctrlWeaponName) {
+          this.el.ctrlWeaponName.textContent = `${shortName(w.name).toUpperCase()} ×${stock}`;
+        }
       }
 
       // Live HP-Bars + credits — Desktop.

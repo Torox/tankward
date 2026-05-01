@@ -139,15 +139,118 @@ body.has-touch .hud-desktop-only {
 }
 
 /* Touch-Buttons brauchen mindestens 48px Tap-Target */
-#touch-fire,
-#touch-weapon,
 #btn-pause,
 #btn-banner-continue {
   min-height: 48px;
 }
 
-#touch-fire {
-  min-width: 96px;
+/* ---- 6-Button-Bedienpanel (2 Zeilen × 3 Spalten) ----------------------- */
+#control-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 6px;
+  width: calc(100% - 12px);
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 6px;
+  background: rgba(11, 18, 32, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+.ctrl-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 56px;
+  padding: 8px 4px;
+  background: rgba(31, 41, 55, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  color: #f8fafc;
+  font-family: 'Press Start 2P', monospace;
+  letter-spacing: 0.05em;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+  transition: background 80ms ease, transform 60ms ease, border-color 80ms ease;
+}
+.ctrl-btn:active,
+.ctrl-btn[data-pressed='1'] {
+  background: #fbbf24;
+  color: #0b1220;
+  border-color: #fbbf24;
+  transform: scale(0.96);
+}
+.ctrl-btn .ctrl-icon {
+  font-size: 18px;
+  line-height: 1;
+  color: #fbbf24;
+}
+.ctrl-btn .ctrl-label {
+  font-size: 9px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.ctrl-btn:active .ctrl-icon,
+.ctrl-btn[data-pressed='1'] .ctrl-icon {
+  color: #0b1220;
+}
+
+/* Feuer-Button: rote Akzentfarbe statt Standard */
+.ctrl-fire {
+  background: linear-gradient(180deg, #dc2626, #991b1b);
+  border-color: rgba(254, 202, 202, 0.5);
+}
+.ctrl-fire .ctrl-icon { color: #fde68a; }
+.ctrl-fire .ctrl-label { color: #fff; }
+
+/* CSS-Pfeile — alle 4 Richtungen optisch identisch (gleiche Pixel-Geometrie) */
+.arrow {
+  display: block;
+  width: 0;
+  height: 0;
+}
+.arrow.up {
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  border-bottom: 14px solid #fbbf24;
+}
+.arrow.down {
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  border-top: 14px solid #fbbf24;
+}
+.arrow.left {
+  border-top: 9px solid transparent;
+  border-bottom: 9px solid transparent;
+  border-right: 14px solid #fbbf24;
+}
+.arrow.right {
+  border-top: 9px solid transparent;
+  border-bottom: 9px solid transparent;
+  border-left: 14px solid #fbbf24;
+}
+.ctrl-btn:active .arrow.up,
+.ctrl-btn[data-pressed='1'] .arrow.up { border-bottom-color: #0b1220; }
+.ctrl-btn:active .arrow.down,
+.ctrl-btn[data-pressed='1'] .arrow.down { border-top-color: #0b1220; }
+.ctrl-btn:active .arrow.left,
+.ctrl-btn[data-pressed='1'] .arrow.left { border-right-color: #0b1220; }
+.ctrl-btn:active .arrow.right,
+.ctrl-btn[data-pressed='1'] .arrow.right { border-left-color: #0b1220; }
+
+@media (max-width: 720px) {
+  .ctrl-btn { min-height: 60px; }
+  .ctrl-btn .ctrl-label { font-size: 8px; }
+  .ctrl-btn .ctrl-icon { font-size: 20px; }
 }
 
 /* Player-Strip auf Mobile: kleine Pillen mit Farbe + HP-Mini-Bar */

@@ -152,8 +152,8 @@ function bindMouseGestures(game) {
 // -- D-Pad-Aim-Buttons -----------------------------------------------------
 
 function bindAimButtons(game) {
-  const dpad = document.getElementById('dpad');
-  if (!dpad) return;
+  const panel = document.getElementById('control-panel');
+  if (!panel) return;
   if (!game.aimInput) game.aimInput = { angleDir: 0, powerDir: 0 };
 
   /** @type {Record<string, [keyof typeof game.aimInput, number]>} */
@@ -164,7 +164,7 @@ function bindAimButtons(game) {
     'power-down':  ['powerDir', -1]
   };
 
-  dpad.querySelectorAll('button[data-aim]').forEach((btn) => {
+  panel.querySelectorAll('button[data-aim]').forEach((btn) => {
     const action = btn.getAttribute('data-aim');
     const cfg = apply[action];
     if (!cfg) return;

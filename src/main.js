@@ -151,38 +151,31 @@ app.innerHTML = `
   </div>
 
   <div id="touch-controls" class="hidden absolute inset-x-0 bottom-0 pointer-events-none z-10">
-    <div class="flex justify-between items-end p-3 gap-2">
-      <div class="pointer-events-auto bg-tw-panel/85 border border-white/10 rounded p-2 flex items-center gap-2">
-        <div id="dpad" class="grid gap-1"
-             style="grid-template-areas: '. up .' 'left center right' '. down .'; grid-template-columns: 38px 38px 38px; grid-template-rows: 38px 38px 38px;">
-          <button data-aim="power-up" style="grid-area: up;"
-            class="font-pixel text-lg bg-tw-bg/90 border border-white/20 rounded text-white active:bg-tw-accent active:text-tw-bg select-none">↑</button>
-          <button data-aim="angle-left" style="grid-area: left;"
-            class="font-pixel text-lg bg-tw-bg/90 border border-white/20 rounded text-white active:bg-tw-accent active:text-tw-bg select-none">←</button>
-          <div style="grid-area: center;"
-               class="font-pixel text-[7px] text-white/40 flex items-center justify-center select-none">AIM</div>
-          <button data-aim="angle-right" style="grid-area: right;"
-            class="font-pixel text-lg bg-tw-bg/90 border border-white/20 rounded text-white active:bg-tw-accent active:text-tw-bg select-none">→</button>
-          <button data-aim="power-down" style="grid-area: down;"
-            class="font-pixel text-lg bg-tw-bg/90 border border-white/20 rounded text-white active:bg-tw-accent active:text-tw-bg select-none">↓</button>
-        </div>
-        <div class="font-pixel flex flex-col gap-1 text-[10px] min-w-[44px]">
-          <span class="text-white/60">Winkel</span>
-          <span id="dpad-angle" class="text-tw-accent">90°</span>
-          <span class="text-white/60 mt-1">Stärke</span>
-          <span id="dpad-power" class="text-emerald-400">50</span>
-        </div>
-      </div>
-      <div class="flex items-end gap-2 pointer-events-auto">
-        <button id="touch-weapon"
-          class="font-pixel text-[10px] bg-tw-panel/80 border border-white/20 text-white px-3 py-3 rounded shadow-lg active:bg-tw-panel">
-          Waffe ▸
-        </button>
-        <button id="touch-fire"
-          class="font-pixel text-sm bg-tw-accent text-tw-bg px-7 py-5 rounded-full shadow-lg active:bg-yellow-300 active:scale-95 transition">
-          FEUER
-        </button>
-      </div>
+    <div id="control-panel" class="pointer-events-auto">
+      <button id="touch-weapon" data-act="weapon" class="ctrl-btn ctrl-weapon">
+        <span class="ctrl-icon" aria-hidden="true">&#x25C8;</span>
+        <span class="ctrl-label" id="ctrl-weapon-name">WAFFE</span>
+      </button>
+      <button data-aim="power-up" class="ctrl-btn ctrl-aim">
+        <span class="arrow up" aria-hidden="true"></span>
+        <span class="ctrl-label">STÄRKE +</span>
+      </button>
+      <button id="touch-fire" data-act="fire" class="ctrl-btn ctrl-fire">
+        <span class="ctrl-icon" aria-hidden="true">&#x2605;</span>
+        <span class="ctrl-label">FEUER</span>
+      </button>
+      <button data-aim="angle-left" class="ctrl-btn ctrl-aim">
+        <span class="arrow left" aria-hidden="true"></span>
+        <span class="ctrl-label">WINKEL</span>
+      </button>
+      <button data-aim="power-down" class="ctrl-btn ctrl-aim">
+        <span class="arrow down" aria-hidden="true"></span>
+        <span class="ctrl-label">STÄRKE −</span>
+      </button>
+      <button data-aim="angle-right" class="ctrl-btn ctrl-aim">
+        <span class="arrow right" aria-hidden="true"></span>
+        <span class="ctrl-label">WINKEL</span>
+      </button>
     </div>
   </div>
 

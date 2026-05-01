@@ -31,8 +31,10 @@ export class Projectile {
     /** @type {{x:number,y:number}[]} Trail-Punkte fuer das Rendering */
     this.trail = [];
     this.age = 0;
-    /** @type {'flying'|'rolling'|'drilling'} */
+    /** @type {'flying'|'rolling'|'drilling'|'piercing'} */
     this.mode = 'flying';
+    /** Verbleibende Penetrations-Distanz (Phase 1.2). */
+    this.pierceRemaining = 0;
     /** Splits passieren nur einmal pro Projektil. */
     this.didSplit = false;
     /** True, wenn dieses Projektil eine Submunition ist (Streubombe/MIRV-Kind). */

@@ -4,7 +4,7 @@ import { Tank, TANK_COLORS, pickSpawnPositions } from '../entities/tank.js';
 import { Projectile } from '../entities/projectile.js';
 import { FireBlob } from '../entities/fire-blob.js';
 import { WEAPONS, WEAPON_ORDER, canFire, consume as consumeWeapon } from '../entities/weapons.js';
-import { generateWind, muzzleVelocity, setPhysicsScale } from '../physics/ballistics.js';
+import { generateWind, muzzleVelocity, setPhysicsScale, GRAVITY } from '../physics/ballistics.js';
 import { checkProjectileImpact, applyBlast, settleTanks } from '../physics/collision.js';
 import { AiController, DIFFICULTY } from '../ai/ai.js';
 import { aiBuyWeapons, summarizePurchases } from '../ai/shop.js';
@@ -670,6 +670,7 @@ export class Game {
   _stepProjectile(p, dt, bounds, isChild) {
     if (p.mode === 'rolling') return this._stepRolling(p, dt, bounds);
     if (p.mode === 'drilling') return this._stepDrilling(p, dt, bounds);
+    if (p.mode === 'piercing') return this._stepPiercing(p, dt, bounds);
 
     const prevX = p.x;
     const prevY = p.y;
@@ -757,8 +758,92 @@ export class Game {
       kineticBonus = computeKineticBonus(p, w);
     }
 
+    // Phase 1.2: Penetration. Bei Terrain-Treffer mit hoher kinetischer Energie
+    // bohrt sich die Granate ein, statt sofort zu detonieren — kann durch
+    // Huegel hindurchschlagen und auf der anderen Seite explodieren.
+    if (impact.type === 'terrain' && p.mode === 'flying') {
+      const pierceDist = computePierceDistance(p, w);
+      if (pierceDist >= 8) {
+        p.mode = 'piercing';
+        p.pierceRemaining = pierceDist;
+        p.x = impact.x;
+        p.y = impact.y;
+        // Velocity beim Eintauchen reduzieren — nicht stoppen, aber abbremsen.
+        p.vx *= 0.7;
+        p.vy *= 0.7;
+        return;
+      }
+    }
+
     this._detonate(p, impact, w, { kineticBonus });
     p.alive = false;
+  }
+
+  /**
+   * Pro Frame: Granate bohrt sich durchs Erdreich. Bremst kontinuierlich,
+   * carved einen schmalen Tunnel, detoniert wenn:
+   *   - Penetrations-Reserve aufgebraucht
+   *   - Geschwindigkeit zu klein (festgesetzt)
+   *   - Granate aus dem Boden raus (auf der anderen Seite des Huegels)
+   *   - Tank in Reichweite getroffen
+   */
+  _stepPiercing(p, dt, bounds) {
+    const w = WEAPONS[p.weaponId] || WEAPONS.standard;
+
+    // Position update (mit reduzierter Gravity, Erde traegt das Geschoss).
+    const dx = p.vx * dt;
+    const dy = p.vy * dt;
+    p.x += dx;
+    p.y += dy;
+    p.vy += GRAVITY * 0.3 * dt;
+
+    // Reibung: Pro Sekunde ~50 % Velocity-Verlust skaliert mit (1/caseHardness).
+    const dragFactor = 0.5 / Math.max(0.5, w.caseHardness ?? 1.0);
+    const drag = Math.pow(dragFactor, dt);
+    p.vx *= drag;
+    p.vy *= drag;
+
+    const dist = Math.hypot(dx, dy);
+    p.pierceRemaining -= dist;
+    p.age += dt;
+
+    // Carve schmalen Tunnel — bleibt unsichtbar, da Heightmap keine Tunnel
+    // darstellt. Aber bei finaler Detonation entsteht eine grosse Kerbe.
+    this.terrain.carve(p.x, p.y, 6);
+    p.trail.push({ x: p.x, y: p.y });
+    if (p.trail.length > 24) p.trail.shift();
+
+    // Tank-Treffer waehrend des Bohrens?
+    for (const tank of this.tanks) {
+      if (!tank.alive) continue;
+      if (Math.abs(tank.x - p.x) < 18 && Math.abs(tank.y - p.y) < 24) {
+        const kineticBonus = computeKineticBonus(p, w);
+        this._detonate(p, { type: 'tank', tank, x: p.x, y: p.y }, w, { kineticBonus });
+        p.alive = false;
+        return;
+      }
+    }
+
+    // Out-of-bounds? -> Detonation am letzten Punkt.
+    if (p.x < 0 || p.x > bounds.width || p.y > bounds.height) {
+      this._detonate(p, { x: p.x, y: p.y }, w);
+      p.alive = false;
+      return;
+    }
+
+    // Aus Erdreich raus (Surface unter uns gefallen)? Wieder fliegend.
+    const aboveGround = p.y < this.terrain.surfaceY(p.x) - 2;
+    if (aboveGround) {
+      p.mode = 'flying';
+      return;
+    }
+
+    // Ausgebremst oder Pierce-Reserve aufgebraucht? -> Detonation.
+    const speed = Math.hypot(p.vx, p.vy);
+    if (p.pierceRemaining <= 0 || speed < 80) {
+      this._detonate(p, { x: p.x, y: p.y }, w);
+      p.alive = false;
+    }
   }
 
   _detonate(p, impact, w, opts = {}) {
@@ -1367,4 +1452,27 @@ function computeKineticBonus(p, w) {
   // Skalierung: 0.5 * m * v² / kRef
   const kRef = 4_000_000;
   return Math.min(0.5, (0.5 * m * speed * speed) / kRef);
+}
+
+/**
+ * Penetrations-Distanz beim Aufprall aufs Terrain. Nur Waffen mit
+ * caseHardness > 0 koennen sich einbohren — Roller/Driller haben eigene
+ * Logik (caseHardness 0).
+ *
+ * Eichung:
+ *   Standard (mass 4, h 1.0) bei v=900 px/s -> ~25 px Penetration
+ *   Standard bei v=300 px/s ->  ~3 px (zu wenig, faellt unter Schwelle 8)
+ *   Atombombe (mass 30, h 1.5) bei v=900 -> capped auf 80 px
+ *
+ * Niedrige Power -> Direktdetonation auf Surface (klassisch).
+ * Hohe Power -> bohrt sich in Huegel rein und detoniert tief drin.
+ */
+function computePierceDistance(p, w) {
+  if (!w.caseHardness || w.caseHardness <= 0) return 0;
+  const speed = Math.hypot(p.vx, p.vy);
+  const m = w.mass ?? 4;
+  // Skalierung: KE × Haerte / kRef
+  const kRef = 80_000;
+  const raw = (0.5 * m * speed * speed * w.caseHardness) / kRef;
+  return Math.min(80, Math.max(0, raw));
 }

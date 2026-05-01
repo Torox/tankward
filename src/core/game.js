@@ -38,7 +38,8 @@ export const S = Object.freeze({
 const DEFAULT_CONFIG = {
   numPlayers: 4,
   numHumans: 1,                    // erster Slot ist Mensch, Rest KI
-  aiDifficulty: DIFFICULTY.pro,    // 'beginner' | 'pro' | 'expert'
+  aiDifficulty: DIFFICULTY.pro,    // Legacy — wird ueber resolveCharacter gemappt
+  aiCharacter: 'random',           // Phase 3: 'random' | 'mr-stupid' | ... | 'wind-master'
   bestOf: 3,
   worldSize: 'mittel',             // klein | mittel | gross | riesig
   maxWind: 10,                     // Legacy fuer Backward-Compat
@@ -103,7 +104,7 @@ export class Game {
       // Setup-Form
       setupNumPlayers: document.getElementById('setup-num-players'),
       setupNumHumans: document.getElementById('setup-num-humans'),
-      setupDifficulty: document.getElementById('setup-difficulty'),
+      setupCharacter: document.getElementById('setup-character'),
       setupBestOf: document.getElementById('setup-best-of'),
       setupWorldSize: document.getElementById('setup-world-size'),
       // Zoom-Slider (in-game)
@@ -144,6 +145,7 @@ export class Game {
       numPlayers: this.settings.numPlayers,
       numHumans: this.settings.numHumans,
       aiDifficulty: this.settings.aiDifficulty,
+      aiCharacter: this.settings.aiCharacter ?? DEFAULT_CONFIG.aiCharacter,
       bestOf: this.settings.bestOf,
       worldSize: this.settings.worldSize ?? DEFAULT_CONFIG.worldSize,
       maxWind: this.settings.maxWind ?? DEFAULT_CONFIG.maxWind,
@@ -229,7 +231,7 @@ export class Game {
     // dann numHumans-Wert setzen — sonst wird value="" gesetzt, weil Options
     // noch leer sind.
     if (this.el.setupNumPlayers) this.el.setupNumPlayers.value = String(this.config.numPlayers);
-    if (this.el.setupDifficulty) this.el.setupDifficulty.value = this.config.aiDifficulty;
+    if (this.el.setupCharacter) this.el.setupCharacter.value = this.config.aiCharacter ?? 'random';
     if (this.el.setupBestOf) this.el.setupBestOf.value = String(this.config.bestOf);
     if (this.el.setupWorldSize) this.el.setupWorldSize.value = this.config.worldSize;
     this._refreshNumHumansOptions();
@@ -272,16 +274,16 @@ export class Game {
   _readSetupForm() {
     const np = parseInt(this.el.setupNumPlayers?.value ?? '4', 10);
     const nh = parseInt(this.el.setupNumHumans?.value ?? '1', 10);
-    const diff = this.el.setupDifficulty?.value ?? DIFFICULTY.pro;
+    const character = this.el.setupCharacter?.value ?? 'random';
     const bo = parseInt(this.el.setupBestOf?.value ?? '3', 10);
     this.config.numPlayers = clamp(np, 2, 10);
     this.config.numHumans = clamp(nh, 0, this.config.numPlayers);
-    this.config.aiDifficulty = diff;
+    this.config.aiCharacter = character;
     this.config.bestOf = clamp(bo, 1, 9);
     this.settings = saveSettings({
       numPlayers: this.config.numPlayers,
       numHumans: this.config.numHumans,
-      aiDifficulty: this.config.aiDifficulty,
+      aiCharacter: this.config.aiCharacter,
       bestOf: this.config.bestOf
     });
   }
@@ -429,7 +431,9 @@ export class Game {
       t.credits = this.config.startCredits;
       t.lastShopPurchases = [];
       if (!isHuman) {
-        t.ai = new AiController(t, this.config.aiDifficulty);
+        // Phase 3: Charakter pro Tank. Bei aiCharacter='random' rollt jeder
+        // Tank seinen eigenen Charakter (max Variety in einer Runde).
+        t.ai = new AiController(t, this.config.aiCharacter || this.config.aiDifficulty);
       }
       this.tanks.push(t);
     }

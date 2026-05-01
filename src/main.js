@@ -35,11 +35,16 @@ app.innerHTML = `
         <select id="setup-num-humans" class="bg-tw-panel border border-white/20 rounded px-2 py-2 text-white"></select>
       </label>
       <label class="flex flex-col gap-1">
-        <span class="text-white/70">KI-Stufe</span>
-        <select id="setup-difficulty" class="bg-tw-panel border border-white/20 rounded px-2 py-2 text-white">
-          <option value="beginner">Anfänger</option>
-          <option value="pro" selected>Profi</option>
-          <option value="expert">Pro</option>
+        <span class="text-white/70">KI-Charakter</span>
+        <select id="setup-character" class="bg-tw-panel border border-white/20 rounded px-2 py-2 text-white">
+          <option value="random" selected>🎲 Zufall pro Tank</option>
+          <option value="mr-stupid">🤡 Mr. Stupid (zufällig)</option>
+          <option value="lobber">🏹 Lobber (Bogen)</option>
+          <option value="rifleman">🎯 Rifleman (Direkt)</option>
+          <option value="windless-wit">🌬️ Windless Wit (ignoriert Wind)</option>
+          <option value="lob-shoot">🎲 Lob &amp; Shoot</option>
+          <option value="twanger">🪞 Twanger (Bounce)</option>
+          <option value="wind-master">🌪️ Wind Master (Profi)</option>
         </select>
       </label>
       <label class="flex flex-col gap-1">

@@ -10,7 +10,8 @@ const DEFAULTS = {
   musicTrack: 0,
   numPlayers: 4,
   numHumans: 1,
-  aiDifficulty: 'pro',
+  aiDifficulty: 'pro',     // Legacy — bleibt fuer Backward-Compat
+  aiCharacter: 'random',   // Phase 3: Charakter-Picker (random/mr-stupid/lobber/...)
   bestOf: 3,
   worldSize: 'mittel',
   // Einstellungen-Submenue:

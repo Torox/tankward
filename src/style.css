@@ -62,12 +62,29 @@ body,
   display: flex;
 }
 
-/* Touch-Modus: Overlay ein, Tastatur-Hinweise aus. */
-body.has-touch #touch-controls {
-  display: block !important;
-}
+/* Touch-Modus: Tastatur-Hinweise aus. */
 body.has-touch .desktop-only {
   display: none !important;
+}
+
+/* Touch-Controls nur waehrend des Spiels (PLAYER_TURN/PROJECTILE_FLYING).
+   Game setzt body.in-game, wenn das HUD-Screen aktiv ist. */
+#touch-controls {
+  display: none;
+}
+body.has-touch.in-game #touch-controls {
+  display: block;
+}
+@media (max-width: 720px) {
+  body.in-game #touch-controls {
+    display: block;
+  }
+}
+
+/* Touch-Hint fadet nach kurzer Zeit aus. */
+#touch-hint.fade-out {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* Mobile-HUD-Switch: an wenn entweder schmaler Viewport ODER Touch-Modus. */

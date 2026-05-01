@@ -69,11 +69,11 @@ app.innerHTML = `
       </button>
     </div>
 
-    <div class="font-pixel text-[10px] text-white/40 max-w-sm leading-relaxed">
-      ← → Winkel · ↑ ↓ Stärke · Shift = fein<br>
-      Leertaste = Feuer · Tab/E = Waffe · Q = Waffe zurück · ESC = Pause
+    <div class="font-pixel text-[10px] text-white/40 max-w-sm leading-relaxed desktop-only">
+      Pfeiltasten Winkel/Stärke · Shift = fein<br>
+      Leertaste = Feuer · Tab/E = Waffe · Q = zurück · ESC = Pause
     </div>
-    <div class="font-pixel text-[9px] text-white/30">v0.9 — Schritt 9/11</div>
+    <div class="font-pixel text-[9px] text-white/30">v1.0</div>
   </div>
 
   <div id="screen-hud" class="hidden">
@@ -111,7 +111,7 @@ app.innerHTML = `
       <div id="hud-players" class="bg-tw-panel/80 border border-white/10 rounded p-3 max-w-md flex flex-col gap-1"></div>
       <div class="bg-tw-panel/80 border border-white/10 rounded p-3 text-white/70 max-w-md desktop-only">
         <div class="text-white mb-1">Steuerung</div>
-        <div>← → Winkel · ↑ ↓ Stärke · Shift = fein</div>
+        <div>Pfeile Winkel/Stärke · Shift = fein</div>
         <div>Leertaste = Feuer · Tab/E = Waffe · Q = zurück</div>
         <div id="hud-status" class="text-emerald-400 mt-2">—</div>
       </div>
@@ -147,10 +147,9 @@ app.innerHTML = `
   </div>
 
   <div id="touch-controls" class="hidden absolute inset-x-0 bottom-0 pointer-events-none z-10">
-    <div class="flex justify-between items-end p-3 gap-3">
-      <div class="font-pixel text-[9px] text-white/70 bg-tw-panel/80 border border-white/10 rounded p-2 pointer-events-none max-w-[55%] leading-relaxed">
-        Auf das Spielfeld tippen + ziehen = Zielen.<br>
-        Distanz vom Panzer = Stärke.
+    <div class="flex justify-end items-end p-3 gap-2">
+      <div id="touch-hint" class="font-pixel text-[9px] text-white/80 bg-tw-panel/85 border border-white/10 rounded px-2 py-1 pointer-events-none max-w-[40%] leading-tight transition-opacity duration-700">
+        Tippen + ziehen aufs Feld zum Zielen.
       </div>
       <div class="flex items-end gap-2 pointer-events-auto">
         <button id="touch-weapon"
@@ -195,3 +194,6 @@ app.innerHTML = `
 const game = new Game();
 initTouchControls(game);
 game.start();
+
+// Debug-Hook (auch in Prod nuetzlich, ist <50 Bytes).
+if (typeof window !== 'undefined') window.__game = game;

@@ -185,11 +185,11 @@ export class Renderer {
     ctx.fillStyle = hpColor(tank.hp / tank.maxHp);
     ctx.fillRect(hpX, hpY, hpW * (tank.hp / tank.maxHp), hpH);
 
-    // Name
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    ctx.font = '10px "Press Start 2P", monospace';
+    // Name (Kurzform — id, ohne "(KI)"-Suffix; Beschriftung soll nicht das halbe Tank-Bild verdecken)
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.font = '8px "Press Start 2P", monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(tank.name, cx, hpY - 4);
+    ctx.fillText(tank.id, cx, hpY - 4);
 
     // Active-Marker (blinkender Pfeil)
     if (isActive) {
@@ -242,31 +242,40 @@ export class Renderer {
    */
   drawWindIndicator(wind) {
     const ctx = this.ctx;
+    // Auf Mobile (schmal) weiter unten platzieren — sonst kollidiert er
+    // mit dem oberen Mobile-HUD.
+    const isMobile = this.width <= 720;
     const cx = this.width / 2;
-    const cy = 56;
-    const maxArrow = 60;
+    const pillW = isMobile ? 130 : 180;
+    const pillH = 36;
+    const cy = isMobile ? 110 : 50;
+    const textY = cy + 6;
+    const arrowY = cy - 8;
+    const maxArrow = isMobile ? 48 : 70;
     const arrowLen = (Math.abs(wind) / 10) * maxArrow;
     const dir = Math.sign(wind);
 
     // Hintergrund-Pille
-    ctx.fillStyle = 'rgba(17, 26, 44, 0.7)';
-    roundRect(ctx, cx - 90, cy - 14, 180, 28, 14);
+    ctx.fillStyle = 'rgba(17, 26, 44, 0.85)';
+    roundRect(ctx, cx - pillW / 2, cy - pillH / 2, pillW, pillH, 8);
     ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
 
-    // Pfeil
+    // Pfeil OBERHALB des Texts (nicht durch ihn).
     if (arrowLen > 1) {
       ctx.strokeStyle = wind === 0 ? '#94a3b8' : (dir > 0 ? '#22c55e' : '#ef4444');
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 2;
       ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(cx - dir * arrowLen, cy);
-      ctx.lineTo(cx + dir * arrowLen, cy);
+      ctx.moveTo(cx - dir * arrowLen, arrowY);
+      ctx.lineTo(cx + dir * arrowLen, arrowY);
       ctx.stroke();
-      // Spitze
       ctx.beginPath();
-      ctx.moveTo(cx + dir * arrowLen, cy);
-      ctx.lineTo(cx + dir * (arrowLen - 6), cy - 4);
-      ctx.lineTo(cx + dir * (arrowLen - 6), cy + 4);
+      ctx.moveTo(cx + dir * arrowLen, arrowY);
+      ctx.lineTo(cx + dir * (arrowLen - 5), arrowY - 3);
+      ctx.lineTo(cx + dir * (arrowLen - 5), arrowY + 3);
       ctx.closePath();
       ctx.fillStyle = ctx.strokeStyle;
       ctx.fill();
@@ -276,7 +285,7 @@ export class Renderer {
     ctx.font = '10px "Press Start 2P", monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`Wind ${wind > 0 ? '+' : ''}${wind.toFixed(1)}`, cx, cy);
+    ctx.fillText(`Wind ${wind > 0 ? '+' : ''}${wind.toFixed(1)}`, cx, textY);
     ctx.textBaseline = 'alphabetic';
   }
 

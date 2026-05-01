@@ -177,11 +177,17 @@ export class Game {
     this.el.btnBannerContinue?.addEventListener('click', () => this._advanceFromBanner());
 
     // Setup-Form initial mit Settings vorbelegen.
+    // Reihenfolge: erst numPlayers, dann Options-Liste fuer numHumans aufbauen,
+    // dann numHumans-Wert setzen — sonst wird value="" gesetzt, weil Options
+    // noch leer sind.
     if (this.el.setupNumPlayers) this.el.setupNumPlayers.value = String(this.config.numPlayers);
-    if (this.el.setupNumHumans) this.el.setupNumHumans.value = String(this.config.numHumans);
     if (this.el.setupDifficulty) this.el.setupDifficulty.value = this.config.aiDifficulty;
     if (this.el.setupBestOf) this.el.setupBestOf.value = String(this.config.bestOf);
     this._refreshNumHumansOptions();
+    if (this.el.setupNumHumans) {
+      const n = clamp(this.config.numHumans, 0, this.config.numPlayers);
+      this.el.setupNumHumans.value = String(n);
+    }
     this.el.setupNumPlayers?.addEventListener('change', () => this._refreshNumHumansOptions());
 
     this._updateSoundButtons();
@@ -217,11 +223,14 @@ export class Game {
   _refreshNumHumansOptions() {
     if (!this.el.setupNumHumans || !this.el.setupNumPlayers) return;
     const np = parseInt(this.el.setupNumPlayers.value, 10);
-    const current = parseInt(this.el.setupNumHumans.value, 10);
+    const prevRaw = parseInt(this.el.setupNumHumans.value, 10);
+    // Wenn vorher kein gueltiger Wert existierte, Default aus Settings/Config nehmen.
+    const fallback = clamp(this.config.numHumans ?? 1, 0, np);
+    const current = Number.isFinite(prevRaw) ? Math.min(prevRaw, np) : fallback;
     const opts = [];
     for (let i = 0; i <= np; i++) opts.push(`<option value="${i}">${i}</option>`);
     this.el.setupNumHumans.innerHTML = opts.join('');
-    this.el.setupNumHumans.value = String(Math.min(current, np));
+    this.el.setupNumHumans.value = String(current);
   }
 
   _openPause() {
@@ -282,6 +291,7 @@ export class Game {
     this.scores = new Array(this.config.numPlayers).fill(0);
     this.roundIndex = 0;
     this.maxRounds = this.config.bestOf;
+    this._hintShown = false; // Touch-Hint einmal pro Match.
 
     // Persistente Tanks: bleiben ueber Runden hinweg (Inventory + Credits).
     this.tanks = [];
@@ -807,15 +817,19 @@ export class Game {
           const ratio = Math.max(0, t.hp / t.maxHp);
           const wins = this.scores[i] ?? 0;
           const dim = t.alive ? '' : 'opacity-40';
+          // Kurzname (P1, P2, ...) ohne "(KI)"-Suffix — bleibt einzeilig.
+          const shortLabel = t.id;
+          const aiBadge = t.isHuman ? '' : '<span class="text-white/40 text-[8px] ml-0.5">KI</span>';
           return `
-            <div class="flex items-center gap-2 ${dim}">
-              <span class="inline-block w-2 h-2 rounded-sm" style="background:${t.color}"></span>
-              <span class="text-white text-[10px] w-8">${t.name}</span>
-              <span class="relative inline-block w-20 h-2 bg-black/50 rounded-sm overflow-hidden">
+            <div class="flex items-center gap-2 whitespace-nowrap ${dim}">
+              <span class="inline-block w-2 h-2 rounded-sm flex-shrink-0" style="background:${t.color}"></span>
+              <span class="text-white text-[10px] flex-shrink-0">${shortLabel}</span>
+              ${aiBadge}
+              <span class="relative inline-block w-20 h-2 bg-black/50 rounded-sm overflow-hidden flex-shrink-0">
                 <span class="absolute inset-y-0 left-0" style="width:${ratio * 100}%; background:${this._hpColor(ratio)}"></span>
               </span>
-              <span class="text-tw-accent text-[10px]">x${wins}</span>
-              <span class="text-emerald-300 text-[10px]">${t.credits}¢</span>
+              <span class="text-tw-accent text-[10px] flex-shrink-0">x${wins}</span>
+              <span class="text-emerald-300 text-[10px] flex-shrink-0">${t.credits}¢</span>
             </div>`;
         })
         .join('');
@@ -882,6 +896,20 @@ export class Game {
       if (!this.el[k]) continue;
       if (k === name) this.el[k].classList.remove('hidden');
       else this.el[k].classList.add('hidden');
+    }
+    // Touch-Controls nur sichtbar, wenn HUD aktiv ist (= waehrend Spiel).
+    document.body.classList.toggle('in-game', name === 'hud');
+    // Touch-Hint nur EINMAL pro Match-Session zeigen — nicht bei jedem Turn-Wechsel.
+    const hint = document.getElementById('touch-hint');
+    if (hint) {
+      if (name === 'hud' && !this._hintShown) {
+        this._hintShown = true;
+        hint.classList.remove('fade-out');
+        clearTimeout(this._hintTimer);
+        this._hintTimer = setTimeout(() => hint.classList.add('fade-out'), 4000);
+      } else if (name !== 'hud') {
+        hint.classList.add('fade-out');
+      }
     }
   }
 
@@ -982,6 +1010,10 @@ export class Game {
       this.particles.draw(this.renderer.ctx);
       this.renderer.drawWindIndicator(this.wind);
     }
+
+    // HUD-DOM-Updates auf 10 Hz drosseln (fuers Auge identisch, spart Layout-Cost).
+    if (now - (this._hudT || 0) < 100) return;
+    this._hudT = now;
 
     if (this.state === S.PLAYER_TURN || this.state === S.PROJECTILE_FLYING) {
       const active = this.tanks[this.activeIndex];

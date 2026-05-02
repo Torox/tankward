@@ -298,7 +298,7 @@ export const WEAPONS = {
   },
   'death-head': {
     id: 'death-head',
-    name: 'Death\'s Head',
+    name: 'Death’s Head',
     price: 4200,
     blastRadius: 28,
     damage: 40,

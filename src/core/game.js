@@ -1907,9 +1907,14 @@ function shortName(name) {
 }
 
 function sanitizePackId(name) {
+  // Pack-IDs sind technische Keys fuer localStorage/Option-Values; zur Stabilitaet
+  // werden internationale Namen in eine ASCII-nahe Slug-Form normalisiert.
   const safeBase = String(name)
     .toLowerCase()
-    .replace(/[^a-z0-9äöüß]+/g, '-')
+    .replace(/ß/g, 'ss')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '') || 'pack';
   return `${CUSTOM_PACK_PREFIX}${safeBase}`.slice(0, MAX_PACK_ID_LENGTH);
 }
@@ -1919,9 +1924,8 @@ function clamp(v, lo, hi) {
 }
 
 function normalizeAngle(rad) {
-  while (rad > Math.PI) rad -= Math.PI * 2;
-  while (rad < -Math.PI) rad += Math.PI * 2;
-  return rad;
+  const full = Math.PI * 2;
+  return ((((rad + Math.PI) % full) + full) % full) - Math.PI;
 }
 
 /** Sehr einfacher HTML-Escape fuer Spielernamen im Player-Setup. */

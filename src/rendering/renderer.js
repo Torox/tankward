@@ -458,9 +458,7 @@ export class Renderer {
     const cx = this.viewportW / 2;
     const pillW = isMobile ? 130 : 180;
     const pillH = 36;
-    // Unterhalb des oberen HUD-Streifens. Auf Mobile ist die HUD-Bar dicker
-    // (mehrzeilig mit Player-Pillen) — daher weiter nach unten.
-    const cy = isMobile ? 150 : 110;
+    const cy = isMobile ? 56 : 48;
     const textY = cy + 6;
     const arrowY = cy - 8;
     const maxArrow = isMobile ? 48 : 70;

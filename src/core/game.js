@@ -300,7 +300,7 @@ export class Game {
         this._closePause();
       }
     });
-    window.addEventListener('resize', () => this._syncWorldTopInset());
+    window.addEventListener('resize', () => this._scheduleTopInsetSync());
   }
 
   _readSetupForm() {
@@ -1711,6 +1711,14 @@ export class Game {
     const topbar = document.getElementById('hud-topbar');
     const inset = forceHud && topbar ? topbar.offsetHeight : 0;
     this.renderer.setTopInset(inset);
+  }
+
+  _scheduleTopInsetSync() {
+    if (this._topInsetRaf) return;
+    this._topInsetRaf = requestAnimationFrame(() => {
+      this._topInsetRaf = 0;
+      this._syncWorldTopInset();
+    });
   }
 
   // -- Shop -------------------------------------------------------------------

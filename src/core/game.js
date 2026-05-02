@@ -176,6 +176,10 @@ export class Game {
       weaponPack: this.settings.weaponPack ?? DEFAULT_CONFIG.weaponPack
     };
 
+    /** Resize-getriebene Topbar/Canvas-Synchronisierung. */
+    this._topInsetRaf = null;
+    this._onWindowResize = () => this._scheduleTopInsetSync();
+
     /** D-Pad-Aim-Input: -1/0/+1 je Achse (von touch.js gesetzt). */
     this.aimInput = { angleDir: 0, powerDir: 0 };
     /** Camera-Mode: false = Auto-Fit beim Schuss; true = bleibt im Zoom + folgt Projektil. */
@@ -184,8 +188,6 @@ export class Game {
     this.stateTime = 0;
     /** Set, wenn der eigentliche Match-Zustand pausiert ist. */
     this.paused = false;
-    this._topInsetRaf = null;
-    this._onWindowResize = () => this._scheduleTopInsetSync();
 
     /** @type {Tank[]} */
     this.tanks = [];

@@ -19,7 +19,9 @@ const DEFAULTS = {
   windStage: 'normal',     // Phase 2.3: off|mild|normal|strong|gale|random
   wallMode: 'off',         // Phase 2.2: off|wrap|sticky|elastic|random
   crumblePercent: 75,      // Phase 2.1: 0..100 — Wahrscheinlichkeit, dass Krater glattgezogen wird
-  startCredits: 0          // Anfangsgeld pro Tank
+  startCredits: 0,         // Anfangsgeld pro Tank
+  weaponPack: 'classic-plus',
+  customWeaponPacks: []
 };
 
 let cache = null;

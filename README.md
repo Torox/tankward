@@ -23,9 +23,15 @@ Erfordert Node.js 18+ und npm.
   via Krater-Carving in der Heightmap
 - **Realistische Ballistik** mit Schwerkraft + zufälligem Seitenwind je Runde,
   Substep-Pixel-Kollision (kein Tunneling bei hoher Geschwindigkeit)
-- **8 Waffen:** Standard-Granate, Schwere Granate, Streubombe (Apex-Split ×3),
-  Napalm (Tickschaden), Roller (folgt Hangneigung), Tunnelbohrer, MIRV (Apex-
-  Split ×5), Atombombe (Schockwelle + Screen-Shake)
+- **24 Waffen:** Kultnamen aus Tank Wars (Missile, Scatter Shot, Cruise Missile,
+  MIRV, Nuke), bestehende Tankward-Waffen (Streubombe, Napalm, Roller,
+  Tunnelbohrer, Erdbeben, Sonic, Dirt) und neue Ideen wie Funky Bomb, Railgun,
+  Heat Seeker und Meteor
+- **Waffen-Packs:** Original/Kult, Tankward, Chaos Lab und Classic+ sind
+  auswählbar; eigene Packs können in den Einstellungen lokal erstellt und
+  bearbeitet werden
+- **Responsive Top-Leiste:** aktiver Spieler, Winkel/Stärke, Menü und verfügbare
+  Waffen als quadratische Icon-Slots; das Spielfeld beginnt unterhalb der Leiste
 - **3 KI-Schwierigkeitsstufen:** Anfänger (±30° Streuung), Profi (±5°), Pro
   (lernt aus letztem Schussfehler) — alle mit numerischer Ballistik-Suche
 - **Credit-System:** 1¢ pro HP-Schaden, 200¢ Kill-Bonus, 250¢ Survival-Bonus,
@@ -40,7 +46,7 @@ Erfordert Node.js 18+ und npm.
   optionale loopable Chip-Bass-Hintergrundmusik
 - **Mobile:** Touch-Joystick + Feuer-Button, automatisch aktiv auf
   coarse-Pointer-Geräten (Phone/Tablet)
-- **Persistenz:** Settings (Sound, Musik, Spielanzahl, Stufe, Best-of) via
+- **Persistenz:** Settings (Sound, Musik, Spielanzahl, Stufe, Best-of, Waffenpack) via
   `localStorage` mit In-Memory-Fallback
 
 ## Steuerung
@@ -50,7 +56,7 @@ Erfordert Node.js 18+ und npm.
 | Winkel anpassen | ← → (Shift = fein) |
 | Stärke anpassen | ↑ ↓ (Shift = fein) |
 | Schießen | Leertaste |
-| Waffe wechseln | Tab oder E (Q = zurück) |
+| Waffe wechseln | Tab oder E (Q = zurück), Klick/Tap auf Icon in der Top-Leiste |
 | Pause | ESC |
 
 Auf Mobile: Joystick links für Winkel/Power, FEUER-Button rechts.
@@ -71,7 +77,7 @@ src/
 │  ├─ terrain.js      Heightmap + carve()
 │  ├─ projectile.js   Geschoss mit mode (flying/rolling/drilling)
 │  ├─ fire-blob.js    Napalm-Brandeffekt
-│  └─ weapons.js      Waffen-Katalog (8 Stück)
+│  └─ weapons.js      Waffen-Katalog + Built-in-Waffenpacks
 ├─ physics/
 │  ├─ ballistics.js   v0/Wind-Mapping, generateWind, muzzleVelocity
 │  └─ collision.js    Substep-Hit-Test, applyBlast, settleTanks

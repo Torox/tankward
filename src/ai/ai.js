@@ -55,7 +55,7 @@ export class AiController {
     }
 
     this.targetTank = this._pickTarget(enemies);
-    this.tank.selectedWeapon = this._pickWeapon();
+    this.tank.selectedWeapon = this._pickWeapon(game);
 
     // Charakter berechnet Aim-Solution (incl. eigener Jitter + Schwaeche).
     this.aim = this.character.solve(this.tank, this.targetTank, game);
@@ -118,14 +118,16 @@ export class AiController {
     return enemies[0];
   }
 
-  _pickWeapon() {
+  _pickWeapon(game) {
     // Spezialwaffen einsetzen abhaengig vom Waffen-Tier des Charakters.
     // Tier 0 (Mr. Stupid): nutzt selten Spezialwaffen
     // Tier 1 (Lobber/Rifleman/...): mittlere Wahrscheinlichkeit
     // Tier 2 (Wind Master): immer wenn vorhanden
     const t = this.tank;
+    const allowed = new Set(game?._packWeaponIds?.() ?? Object.keys(WEAPONS));
     const priority = [
-      'nuke', 'mirv', 'quake-large',
+      'nuke', 'death-head', 'funky-bomb', 'meteor', 'baby-nuke', 'mirv', 'quake-large',
+      'railgun', 'heat-seeker', 'cruise-missile', 'scatter-shot',
       'driller', 'quake-medium',
       'dirt-explosive', 'heavy',
       'quake-small', 'cluster', 'roller', 'sonic', 'napalm',
@@ -133,6 +135,7 @@ export class AiController {
     ];
     const tier = this.character.weaponTier ?? 1;
     for (const id of priority) {
+      if (!allowed.has(id)) continue;
       if (canFire(t, id)) {
         const w = WEAPONS[id];
         if (w.unlimited) continue;

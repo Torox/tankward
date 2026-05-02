@@ -11,11 +11,12 @@ import { WEAPONS, WEAPON_ORDER } from '../entities/weapons.js';
  * @param {'beginner'|'pro'|'expert'} difficulty
  * @returns {string[]} Liste gekaufter Waffen-IDs (kann mehrfach dieselbe enthalten)
  */
-export function aiBuyWeapons(tank, difficulty) {
+export function aiBuyWeapons(tank, difficulty, allowedWeaponIds = WEAPON_ORDER) {
+  const allowed = new Set(allowedWeaponIds);
   const purchases = [];
   const buyOne = (id) => {
     const w = WEAPONS[id];
-    if (!w || w.unlimited) return false;
+    if (!allowed.has(id) || !w || w.unlimited) return false;
     if (tank.credits < w.price) return false;
     tank.credits -= w.price;
     tank.inventory.set(id, (tank.inventory.get(id) ?? 0) + 1);
@@ -28,6 +29,7 @@ export function aiBuyWeapons(tank, difficulty) {
     // 60% Chance, ueberhaupt was zu kaufen. Random aus 3 guenstigsten erschwinglichen.
     if (Math.random() < 0.6) {
       const cheap = WEAPON_ORDER
+        .filter((id) => allowed.has(id))
         .map((id) => WEAPONS[id])
         .filter((w) => !w.unlimited && w.price <= tank.credits)
         .sort((a, b) => a.price - b.price)
@@ -48,6 +50,7 @@ export function aiBuyWeapons(tank, difficulty) {
     while (safety-- > 0 && tank.credits >= WEAPONS.heavy.price) {
       let bought = false;
       for (const id of targets) {
+        if (!allowed.has(id)) continue;
         if (stockOf(id) >= 3) continue;
         if (tank.credits >= WEAPONS[id].price) {
           buyOne(id);
@@ -62,24 +65,24 @@ export function aiBuyWeapons(tank, difficulty) {
 
   // expert
   // Stufe 1: Atombombe wenn leistbar (eine pro Match-Reserve aufbauen).
-  if (tank.credits >= WEAPONS.nuke.price && stockOf('nuke') < 1) buyOne('nuke');
+  if (allowed.has('nuke') && tank.credits >= WEAPONS.nuke.price && stockOf('nuke') < 1) buyOne('nuke');
 
   // Stufe 2: MIRV bis 2 Stueck.
-  while (tank.credits >= WEAPONS.mirv.price && stockOf('mirv') < 2) {
+  while (allowed.has('mirv') && tank.credits >= WEAPONS.mirv.price && stockOf('mirv') < 2) {
     if (!buyOne('mirv')) break;
   }
   // Stufe 3: Tunnelbohrer + Heavy stockpilen.
-  while (tank.credits >= WEAPONS.driller.price && stockOf('driller') < 2) {
+  while (allowed.has('driller') && tank.credits >= WEAPONS.driller.price && stockOf('driller') < 2) {
     if (!buyOne('driller')) break;
   }
-  while (tank.credits >= WEAPONS.heavy.price && stockOf('heavy') < 4) {
+  while (allowed.has('heavy') && tank.credits >= WEAPONS.heavy.price && stockOf('heavy') < 4) {
     if (!buyOne('heavy')) break;
   }
   // Stufe 4: Cluster und Roller als Polster.
-  while (tank.credits >= WEAPONS.cluster.price && stockOf('cluster') < 4) {
+  while (allowed.has('cluster') && tank.credits >= WEAPONS.cluster.price && stockOf('cluster') < 4) {
     if (!buyOne('cluster')) break;
   }
-  while (tank.credits >= WEAPONS.roller.price && stockOf('roller') < 4) {
+  while (allowed.has('roller') && tank.credits >= WEAPONS.roller.price && stockOf('roller') < 4) {
     if (!buyOne('roller')) break;
   }
 

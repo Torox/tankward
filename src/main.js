@@ -87,44 +87,22 @@ app.innerHTML = `
   </div>
 
   <div id="screen-hud" class="hidden">
-    <div class="absolute top-3 right-3 flex gap-2">
-      <button id="btn-pause"
-        class="font-pixel text-[10px] bg-tw-panel/80 hover:bg-tw-panel text-white px-3 py-2 rounded border border-white/10">
+    <div id="hud-topbar" class="hud-topbar pointer-events-auto">
+      <div class="hud-turn-card">
+        <span class="text-white/50">Am Zug</span>
+        <span id="hud-active" class="hud-active-name">P1</span>
+        <span class="hud-aim">
+          <span>Winkel <b id="hud-angle">90°</b></span>
+          <span>Power <b id="hud-power">500</b></span>
+        </span>
+      </div>
+      <div class="hud-weapon-wrap">
+        <div id="hud-weapon" class="hud-current-weapon">● Missile ×∞</div>
+        <div id="hud-weapon-grid" class="hud-weapon-grid" aria-label="Verfügbare Waffen"></div>
+      </div>
+      <button id="btn-pause" class="hud-menu-btn font-pixel">
         Menü
       </button>
-    </div>
-
-    <div id="hud-mobile" class="hud-mobile-only absolute top-3 left-3 right-20 pointer-events-none">
-      <div class="bg-tw-panel/85 border border-white/10 rounded p-2 font-pixel text-[9px] flex flex-col gap-1">
-        <div class="flex items-center justify-between gap-2">
-          <span id="hud-active-mobile" class="text-tw-accent text-xs truncate">P1</span>
-          <span class="text-white/80">
-            <span id="hud-angle-mobile" class="text-emerald-400">90°</span>
-            <span class="text-white/30">·</span>
-            <span id="hud-power-mobile" class="text-emerald-400">50</span>
-          </span>
-          <span id="hud-weapon-mobile" class="text-tw-accent truncate max-w-[120px]">● Std ×∞</span>
-        </div>
-        <div id="hud-players-mobile" class="flex items-center gap-1 flex-wrap"></div>
-      </div>
-    </div>
-
-    <div id="hud-desktop" class="absolute bottom-3 inset-x-3 flex flex-wrap gap-3 items-end justify-between font-pixel text-[10px] pointer-events-none hud-desktop-only">
-      <div class="bg-tw-panel/80 border border-white/10 rounded p-3 min-w-[220px]">
-        <div class="text-white/70 mb-1">Aktiver Spieler</div>
-        <div id="hud-active" class="text-tw-accent text-sm">P1</div>
-        <div class="mt-2">Winkel: <span id="hud-angle" class="text-emerald-400">90°</span></div>
-        <div>Stärke: <span id="hud-power" class="text-emerald-400">50</span></div>
-        <div class="mt-2 text-white/70">Waffe</div>
-        <div id="hud-weapon" class="text-tw-accent">● Standard ×∞</div>
-      </div>
-      <div id="hud-players" class="bg-tw-panel/80 border border-white/10 rounded p-3 max-w-md flex flex-col gap-1"></div>
-      <div class="bg-tw-panel/80 border border-white/10 rounded p-3 text-white/70 max-w-md desktop-only">
-        <div class="text-white mb-1">Steuerung</div>
-        <div>Pfeile Winkel/Stärke · Shift = fein</div>
-        <div>Leertaste = Feuer · Tab/E = Waffe · Q = zurück</div>
-        <div id="hud-status" class="text-emerald-400 mt-2">—</div>
-      </div>
     </div>
   </div>
 
@@ -239,6 +217,23 @@ app.innerHTML = `
             <option value="5000">5000 ¢</option>
           </select>
         </label>
+        <label class="flex flex-col gap-1">
+          <span class="text-white/70">Waffen-Pack</span>
+          <select id="set-weapon-pack" class="bg-tw-bg border border-white/20 rounded px-2 py-2 text-white"></select>
+        </label>
+        <div class="bg-tw-bg/50 border border-white/10 rounded p-3 flex flex-col gap-2">
+          <div class="text-white/70">Waffen-Pack bearbeiten / erstellen</div>
+          <input id="set-pack-name" type="text" maxlength="32" placeholder="Eigenes Pack"
+            class="bg-tw-bg border border-white/20 rounded px-2 py-2 text-white" />
+          <div id="set-pack-weapons" class="weapon-pack-editor"></div>
+          <button id="btn-save-pack"
+            class="font-pixel text-[10px] bg-tw-panel/80 hover:bg-tw-panel text-white px-3 py-2 rounded border border-white/20">
+            Als eigenes Pack speichern
+          </button>
+          <div class="text-[8px] text-white/40 leading-relaxed">
+            Built-ins bleiben unverändert. Eigene Packs werden lokal gespeichert.
+          </div>
+        </div>
       </div>
       <div class="flex justify-end">
         <button id="btn-close-settings"

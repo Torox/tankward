@@ -1909,7 +1909,7 @@ function shortName(name) {
 function sanitizePackId(name) {
   const safeBase = String(name)
     .toLowerCase()
-    .replace(/[^a-z0-9äöüß]+/gi, '-')
+    .replace(/[^a-z0-9äöüß]+/g, '-')
     .replace(/^-+|-+$/g, '') || 'pack';
   return `${CUSTOM_PACK_PREFIX}${safeBase}`.slice(0, MAX_PACK_ID_LENGTH);
 }

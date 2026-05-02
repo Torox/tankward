@@ -300,6 +300,12 @@ export class Game {
         this._closePause();
       }
     });
+    window.addEventListener('resize', () => this._syncWorldTopInset());
+    const topbar = document.getElementById('hud-topbar');
+    if (topbar && typeof ResizeObserver !== 'undefined') {
+      this._topbarObserver = new ResizeObserver(() => this._syncWorldTopInset());
+      this._topbarObserver.observe(topbar);
+    }
   }
 
   _readSetupForm() {
@@ -1619,7 +1625,10 @@ export class Game {
     const available = this._availableWeaponIds(active);
     if (!available.includes(active.selectedWeapon)) active.selectedWeapon = available[0] ?? 'standard';
     const key = `${active.id}|${active.selectedWeapon}|${available.map((id) => `${id}:${active.inventory.get(id) ?? 0}`).join(',')}`;
-    if (grid.dataset.key === key) return;
+    if (grid.dataset.key === key) {
+      this._syncWorldTopInset();
+      return;
+    }
     grid.dataset.key = key;
     grid.innerHTML = available.map((id) => {
       const w = WEAPONS[id];

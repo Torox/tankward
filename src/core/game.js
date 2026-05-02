@@ -301,11 +301,6 @@ export class Game {
       }
     });
     window.addEventListener('resize', () => this._syncWorldTopInset());
-    const topbar = document.getElementById('hud-topbar');
-    if (topbar && typeof ResizeObserver !== 'undefined') {
-      this._topbarObserver = new ResizeObserver(() => this._syncWorldTopInset());
-      this._topbarObserver.observe(topbar);
-    }
   }
 
   _readSetupForm() {

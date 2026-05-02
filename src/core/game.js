@@ -184,6 +184,8 @@ export class Game {
     this.stateTime = 0;
     /** Set, wenn der eigentliche Match-Zustand pausiert ist. */
     this.paused = false;
+    this._topInsetRaf = null;
+    this._onWindowResize = () => this._scheduleTopInsetSync();
 
     /** @type {Tank[]} */
     this.tanks = [];
@@ -300,7 +302,15 @@ export class Game {
         this._closePause();
       }
     });
-    window.addEventListener('resize', () => this._scheduleTopInsetSync());
+    window.addEventListener('resize', this._onWindowResize);
+  }
+
+  destroy() {
+    window.removeEventListener('resize', this._onWindowResize);
+    if (this._topInsetRaf !== null) {
+      cancelAnimationFrame(this._topInsetRaf);
+      this._topInsetRaf = null;
+    }
   }
 
   _readSetupForm() {
@@ -1714,9 +1724,9 @@ export class Game {
   }
 
   _scheduleTopInsetSync() {
-    if (this._topInsetRaf) return;
+    if (this._topInsetRaf !== null) return;
     this._topInsetRaf = requestAnimationFrame(() => {
-      this._topInsetRaf = 0;
+      this._topInsetRaf = null;
       this._syncWorldTopInset();
     });
   }

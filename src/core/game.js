@@ -75,6 +75,8 @@ const PLAYER_NAMES = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10
 const KILL_BONUS = 400;
 const ROUND_SURVIVOR_BONUS = 600;
 const HIT_CREDITS_PER_HP = 3;
+const CUSTOM_PACK_PREFIX = 'custom-';
+const MAX_PACK_ID_LENGTH = 48;
 
 export class Game {
   constructor() {
@@ -373,8 +375,7 @@ export class Game {
     const ids = Array.from(this.el.setPackWeapons?.querySelectorAll('input[type="checkbox"]:checked') ?? [])
       .map((input) => input.value);
     const weapons = normalizeWeaponIds(ids);
-    const safeBase = rawName.toLowerCase().replace(/[^a-z0-9äöüß]+/gi, '-').replace(/^-+|-+$/g, '') || 'pack';
-    const id = `custom-${safeBase}`.slice(0, 48);
+    const id = sanitizePackId(rawName);
     const others = (this.settings.customWeaponPacks ?? []).filter((p) => p.id !== id);
     const customWeaponPacks = [...others, { id, name: rawName, weapons }];
     this.config.weaponPack = id;
@@ -981,9 +982,7 @@ export class Game {
     const ty = target.y - 12;
     const desired = Math.atan2(ty - p.y, tx - p.x);
     const current = Math.atan2(p.vy, p.vx);
-    let delta = desired - current;
-    while (delta > Math.PI) delta -= Math.PI * 2;
-    while (delta < -Math.PI) delta += Math.PI * 2;
+    const delta = normalizeAngle(desired - current);
     const maxTurn = (cfg.turnRate ?? 1.5) * dt;
     const next = current + clamp(delta, -maxTurn, maxTurn);
     p.vx = Math.cos(next) * speed;
@@ -1907,8 +1906,22 @@ function shortName(name) {
   return SHORT_NAMES[name] ?? name;
 }
 
+function sanitizePackId(name) {
+  const safeBase = String(name)
+    .toLowerCase()
+    .replace(/[^a-z0-9äöüß]+/gi, '-')
+    .replace(/^-+|-+$/g, '') || 'pack';
+  return `${CUSTOM_PACK_PREFIX}${safeBase}`.slice(0, MAX_PACK_ID_LENGTH);
+}
+
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
+}
+
+function normalizeAngle(rad) {
+  while (rad > Math.PI) rad -= Math.PI * 2;
+  while (rad < -Math.PI) rad += Math.PI * 2;
+  return rad;
 }
 
 /** Sehr einfacher HTML-Escape fuer Spielernamen im Player-Setup. */

@@ -1,6 +1,8 @@
 import { CONFIG } from '../core/config.js';
 import { TANK_BODY_HEIGHT, TANK_BODY_WIDTH, TURRET_LENGTH } from '../entities/tank.js';
 
+const MIN_VISIBLE_HEIGHT = 1;
+
 /**
  * Renderer kapselt Canvas-Kontext, DPR-Resize und Hintergrund/Terrain-Zeichnung.
  * Logische Koordinaten sind CSS-Pixel; setTransform skaliert nach DPR.
@@ -261,7 +263,7 @@ export class Renderer {
 
   resize() {
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const visibleH = Math.max(1, window.innerHeight - this.topInset);
+    const visibleH = Math.max(MIN_VISIBLE_HEIGHT, window.innerHeight - this.topInset);
     this.viewportW = Math.max(CONFIG.world.minWidth, window.innerWidth);
     this.viewportH = Math.max(CONFIG.world.minHeight, visibleH);
     this.canvas.width = Math.floor(window.innerWidth * this.dpr);

@@ -176,7 +176,7 @@ export class Game {
       weaponPack: this.settings.weaponPack ?? DEFAULT_CONFIG.weaponPack
     };
 
-    /** Resize-getriebene Topbar/Canvas-Synchronisierung. */
+    /** Resize-driven topbar/canvas synchronization. */
     this._topInsetRaf = null;
     this._onWindowResize = () => this._scheduleTopInsetSync();
 
@@ -307,6 +307,7 @@ export class Game {
     window.addEventListener('resize', this._onWindowResize);
   }
 
+  /** Cleans up window listeners and pending animation frames if the game is torn down. */
   destroy() {
     window.removeEventListener('resize', this._onWindowResize);
     if (this._topInsetRaf !== null) {

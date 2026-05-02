@@ -17,6 +17,7 @@ export class Renderer {
     this.worldW = 1280;
     this.worldH = 720;
     this.dpr = 1;
+    this.topInset = 0;
     /** Camera: zoom relativ zum Fit-Scale; pan in Welt-Koordinaten. */
     this.camera = { zoom: 1, panX: 0, panY: 0 };
     /** Ziel-Camera (fuer animiertes Hin-Lerpen bei Game-getriebenen Aenderungen). */
@@ -48,6 +49,13 @@ export class Renderer {
     this.worldW = w;
     this.worldH = h;
     this._clampPan();
+  }
+
+  setTopInset(px) {
+    const next = Math.max(0, Math.round(px || 0));
+    if (next === this.topInset) return;
+    this.topInset = next;
+    this.resize();
   }
 
   /**
@@ -253,16 +261,18 @@ export class Renderer {
 
   resize() {
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const visibleH = Math.max(1, window.innerHeight - this.topInset);
     this.viewportW = Math.max(CONFIG.world.minWidth, window.innerWidth);
-    this.viewportH = Math.max(CONFIG.world.minHeight, window.innerHeight);
+    this.viewportH = Math.max(CONFIG.world.minHeight, visibleH);
     this.canvas.width = Math.floor(window.innerWidth * this.dpr);
-    this.canvas.height = Math.floor(window.innerHeight * this.dpr);
+    this.canvas.height = Math.floor(visibleH * this.dpr);
     this.canvas.style.width = `${window.innerWidth}px`;
-    this.canvas.style.height = `${window.innerHeight}px`;
+    this.canvas.style.height = `${visibleH}px`;
+    this.canvas.style.top = `${this.topInset}px`;
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     // Echte Viewport-Werte (CSS-Pixel) — kann kleiner als minWidth sein.
     this.viewportW = window.innerWidth;
-    this.viewportH = window.innerHeight;
+    this.viewportH = visibleH;
     // Backwards-compat-Aliasse — manche Stellen referenzieren noch width/height.
     this.width = this.viewportW;
     this.height = this.viewportH;

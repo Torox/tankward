@@ -1,23 +1,22 @@
 /**
- * Waffen-Katalog (Spec-Tabelle aus dem Briefing).
- * Datenobjekte; die eigentliche Logik (Apex-Split, Rollen, Bohren, Napalm)
- * orchestriert Game (siehe game.js: _handleImpact, _updateRolling, _updateDrilling, _splitAtApex, _spawnNapalm).
+ * Waffen-Katalog.
  *
- * Numerische Werte sind Tuning-Parameter — Aenderungen koennen sich stark
- * auf das Spielgefuehl auswirken.
+ * Der Katalog mischt die Kultnamen aus dem originalen Tank-Wars-Umfeld
+ * (Missile, Scatter Shot, Cruise Missile, MIRV, Nuke) mit bereits erfundenen
+ * Tankward-Waffen (Streubombe, Napalm, Roller, Tunnelbohrer, Erdbeben, ...)
+ * und neuen Ideen fuer kuenftige Waffenpacks.
  */
 /**
  * Pseudo-Masse je Waffe — beeinflusst Kinetik-Bonus bei Direkttreffern und
- * (ab Phase 1.2) Penetrations-Tiefe ins Terrain. Skala: 1 = leicht, 30 = brutal.
+ * Penetrations-Tiefe ins Terrain. Skala: 1 = leicht, 30 = brutal.
  *
- * caseHardness (Phase 1.2) regelt, wie tief die Granate sich ins Erdreich bohrt
- * bevor sie detoniert: 0 = detoniert sofort beim Aufprall, 1 = Standard,
- * >1 = AP-aehnlich. Default 1.0 fuer alle, individuell tunbar.
+ * caseHardness regelt, wie tief die Granate sich ins Erdreich bohrt bevor sie
+ * detoniert: 0 = detoniert sofort beim Aufprall, 1 = Standard, >1 = AP-aehnlich.
  */
 export const WEAPONS = {
   standard: {
     id: 'standard',
-    name: 'Standard-Granate',
+    name: 'Missile',
     price: 0,
     unlimited: true,
     blastRadius: 35,
@@ -26,7 +25,7 @@ export const WEAPONS = {
     caseHardness: 1.0,
     color: '#fbbf24',
     icon: '●',
-    desc: 'Solide Standardwaffe. Unbegrenzt verfügbar.'
+    desc: 'Klassischer Standard-Schuss. Unbegrenzt verfügbar.'
   },
   heavy: {
     id: 'heavy',
@@ -39,6 +38,20 @@ export const WEAPONS = {
     color: '#f97316',
     icon: '◉',
     desc: 'Größerer Sprengradius, doppelter Schaden.'
+  },
+  'scatter-shot': {
+    id: 'scatter-shot',
+    name: 'Scatter Shot',
+    price: 900,
+    blastRadius: 22,
+    damage: 24,
+    mass: 3,
+    caseHardness: 0.35,
+    splitOnApex: 7,
+    splitSpread: 210,
+    color: '#bef264',
+    icon: '✣',
+    desc: 'Kultwaffe: streut sieben kleine Sprengköpfe über ein breites Gebiet.'
   },
   cluster: {
     id: 'cluster',
@@ -67,7 +80,7 @@ export const WEAPONS = {
       blobSpreadX: 70,
       tickDamage: 15,
       ticks: 5,
-      tickInterval: 0.4, // s zwischen Ticks
+      tickInterval: 0.4,
       radius: 22
     },
     color: '#ef4444',
@@ -81,7 +94,7 @@ export const WEAPONS = {
     blastRadius: 25,
     damage: 40,
     mass: 6,
-    caseHardness: 0.0, // rollt — bohrt nie
+    caseHardness: 0.0,
     rollOnImpact: { friction: 60, gravityFactor: 0.7, maxRollTime: 4 },
     color: '#9ca3af',
     icon: '○',
@@ -94,11 +107,25 @@ export const WEAPONS = {
     blastRadius: 45,
     damage: 60,
     mass: 8,
-    caseHardness: 0.0, // hat eigene drill-Logik mit fester Distanz
+    caseHardness: 0.0,
     drillOnImpact: { distance: 80, speed: 90 },
     color: '#78350f',
     icon: '✦',
     desc: 'Gräbt sich 80 px tief ein, dann Detonation.'
+  },
+  'cruise-missile': {
+    id: 'cruise-missile',
+    name: 'Cruise Missile',
+    price: 1800,
+    blastRadius: 48,
+    damage: 55,
+    mass: 6,
+    caseHardness: 0.8,
+    homing: { turnRate: 1.6, acquireRange: 900, maxAge: 4.5 },
+    windFactor: 0.35,
+    color: '#38bdf8',
+    icon: '➤',
+    desc: 'Kultwaffe mit sanfter Zielsuche und reduzierter Windanfälligkeit.'
   },
   mirv: {
     id: 'mirv',
@@ -113,6 +140,19 @@ export const WEAPONS = {
     color: '#22d3ee',
     icon: '✸',
     desc: 'Spaltet sich am Apex in 5 Sprengköpfe.'
+  },
+  'baby-nuke': {
+    id: 'baby-nuke',
+    name: 'Baby Nuke',
+    price: 3200,
+    blastRadius: 85,
+    damage: 75,
+    mass: 18,
+    caseHardness: 1.2,
+    shake: { magnitude: 12, duration: 0.45 },
+    color: '#fde68a',
+    icon: '☢',
+    desc: 'Kleinere Nuke für frühere Runden — brutal, aber nicht final.'
   },
   'dirt-small': {
     id: 'dirt-small',
@@ -187,15 +227,13 @@ export const WEAPONS = {
     damage: 0,
     mass: 4,
     caseHardness: 0.2,
-    // Erdbeben = schmale tiefe Risse in Sequenz, nicht ein zusammenhaengender Graben.
-    // Die Risse oeffnen sich nacheinander weiter weg vom Epizentrum.
     earthquake: {
-      initialRadius: 32,        // Initialkrater am Aufprall
-      cracks: 6,                 // Anzahl Risse pro Seite
-      crackSpacing: 70,          // Abstand zwischen Rissen (px)
-      crackRadius: 10,           // Schmale Rissbreite
-      crackDepth: 35,            // Tiefe unter der Oberflaeche
-      stepDelay: 0.06,           // Zeitversatz pro Riss
+      initialRadius: 32,
+      cracks: 6,
+      crackSpacing: 70,
+      crackRadius: 10,
+      crackDepth: 35,
+      stepDelay: 0.06,
       shakePerCrack: 4.0
     },
     color: '#a78bfa',
@@ -244,14 +282,84 @@ export const WEAPONS = {
     icon: '⌇',
     desc: 'Großes Erdbeben — verheerende Risse durch das halbe Spielfeld.'
   },
+  'funky-bomb': {
+    id: 'funky-bomb',
+    name: 'Funky Bomb',
+    price: 3400,
+    blastRadius: 24,
+    damage: 34,
+    mass: 7,
+    caseHardness: 0.3,
+    splitOnApex: 9,
+    splitSpread: 260,
+    color: '#f472b6',
+    icon: '✺',
+    desc: 'Neue Idee mit Retro-Flair: chaotischer Split aus neun bunten Ladungen.'
+  },
+  'death-head': {
+    id: 'death-head',
+    name: "Death's Head",
+    price: 4200,
+    blastRadius: 28,
+    damage: 40,
+    mass: 12,
+    caseHardness: 0.5,
+    splitOnApex: 11,
+    splitSpread: 310,
+    shake: { magnitude: 10, duration: 0.4 },
+    color: '#f9a8d4',
+    icon: '☠',
+    desc: 'Endgame-Splitwaffe: viele Sprengköpfe, große Streuung, hoher Druck.'
+  },
+  railgun: {
+    id: 'railgun',
+    name: 'Railgun',
+    price: 2600,
+    blastRadius: 18,
+    damage: 85,
+    mass: 16,
+    caseHardness: 2.2,
+    pierceAlways: true,
+    windFactor: 0.1,
+    color: '#e5e7eb',
+    icon: '━',
+    desc: 'Neue Präzisionswaffe: kleiner Krater, hoher Direkttreffer-Schaden.'
+  },
+  'heat-seeker': {
+    id: 'heat-seeker',
+    name: 'Heat Seeker',
+    price: 2200,
+    blastRadius: 38,
+    damage: 45,
+    mass: 5,
+    caseHardness: 0.7,
+    homing: { turnRate: 2.4, acquireRange: 700, maxAge: 3.5 },
+    windFactor: 0.5,
+    color: '#fb7185',
+    icon: '◆',
+    desc: 'Neue Zielsucher-Rakete: korrigiert in der Luft Richtung nächstem Gegner.'
+  },
+  meteor: {
+    id: 'meteor',
+    name: 'Meteor',
+    price: 3000,
+    blastRadius: 70,
+    damage: 65,
+    mass: 22,
+    caseHardness: 1.8,
+    shake: { magnitude: 14, duration: 0.5 },
+    color: '#fb923c',
+    icon: '☄',
+    desc: 'Schwerer Einschlag mit tiefem Krater und starkem Screen-Shake.'
+  },
   nuke: {
     id: 'nuke',
-    name: 'Atombombe',
+    name: 'Nuke',
     price: 5000,
     blastRadius: 120,
     damage: 100,
     mass: 30,
-    caseHardness: 1.5, // schweres Gehaeuse, bohrt sich tief ein
+    caseHardness: 1.5,
     shake: { magnitude: 18, duration: 0.7 },
     color: '#fde047',
     icon: '☢',
@@ -262,11 +370,14 @@ export const WEAPONS = {
 export const WEAPON_ORDER = [
   'standard',
   'heavy',
+  'scatter-shot',
   'cluster',
   'napalm',
   'roller',
   'driller',
+  'cruise-missile',
   'mirv',
+  'baby-nuke',
   'dirt-small',
   'dirt-medium',
   'dirt-large',
@@ -275,8 +386,70 @@ export const WEAPON_ORDER = [
   'quake-small',
   'quake-medium',
   'quake-large',
+  'funky-bomb',
+  'death-head',
+  'railgun',
+  'heat-seeker',
+  'meteor',
   'nuke'
 ];
+
+export const BUILT_IN_WEAPON_PACKS = {
+  original: {
+    id: 'original',
+    name: 'Original / Kult',
+    desc: 'Fokus auf die historischen Tank-Wars-Kultnamen.',
+    weapons: ['standard', 'scatter-shot', 'cruise-missile', 'mirv', 'baby-nuke', 'nuke']
+  },
+  tankward: {
+    id: 'tankward',
+    name: 'Tankward',
+    desc: 'Die bereits erfundenen Tankward-Waffen plus Utility-Terrain.',
+    weapons: ['standard', 'heavy', 'cluster', 'napalm', 'roller', 'driller', 'dirt-small', 'dirt-medium', 'dirt-large', 'dirt-explosive', 'sonic', 'quake-small', 'quake-medium', 'quake-large', 'nuke']
+  },
+  chaos: {
+    id: 'chaos',
+    name: 'Chaos Lab',
+    desc: 'Neue Ideen und späte Endgame-Waffen.',
+    weapons: ['standard', 'scatter-shot', 'cruise-missile', 'funky-bomb', 'death-head', 'railgun', 'heat-seeker', 'meteor', 'baby-nuke', 'nuke']
+  },
+  'classic-plus': {
+    id: 'classic-plus',
+    name: 'Classic+',
+    desc: 'Alles: Original, Tankward und neue Ideen.',
+    weapons: WEAPON_ORDER
+  }
+};
+
+export function normalizeWeaponIds(ids) {
+  const seen = new Set();
+  const result = [];
+  for (const id of ['standard', ...(ids ?? [])]) {
+    if (!WEAPONS[id] || seen.has(id)) continue;
+    seen.add(id);
+    result.push(id);
+  }
+  return WEAPON_ORDER.filter((id) => seen.has(id));
+}
+
+export function allWeaponPacks(customPacks = []) {
+  const custom = {};
+  for (const pack of customPacks ?? []) {
+    if (!pack?.id || !pack?.name) continue;
+    custom[pack.id] = {
+      id: pack.id,
+      name: pack.name,
+      desc: pack.desc || 'Eigenes Waffenpack',
+      weapons: normalizeWeaponIds(pack.weapons)
+    };
+  }
+  return { ...BUILT_IN_WEAPON_PACKS, ...custom };
+}
+
+export function packWeaponIds(packId, customPacks = []) {
+  const packs = allWeaponPacks(customPacks);
+  return normalizeWeaponIds((packs[packId] ?? packs['classic-plus']).weapons);
+}
 
 /** Darf in der naechsten Runde verfuegbar sein, wenn vorhanden? Standard=unbegrenzt. */
 export function canFire(tank, weaponId) {

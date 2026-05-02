@@ -4,7 +4,15 @@ import { Tank, TANK_COLORS, pickSpawnPositions } from '../entities/tank.js';
 import { Projectile } from '../entities/projectile.js';
 import { FireBlob } from '../entities/fire-blob.js';
 import { ChainHop } from '../entities/chain-hop.js';
-import { WEAPONS, WEAPON_ORDER, canFire, consume as consumeWeapon } from '../entities/weapons.js';
+import {
+  WEAPONS,
+  WEAPON_ORDER,
+  allWeaponPacks,
+  packWeaponIds,
+  normalizeWeaponIds,
+  canFire,
+  consume as consumeWeapon
+} from '../entities/weapons.js';
 import { generateWind, muzzleVelocity, setPhysicsScale, GRAVITY } from '../physics/ballistics.js';
 import { checkProjectileImpact, applyBlast, settleTanks } from '../physics/collision.js';
 import { AiController, DIFFICULTY } from '../ai/ai.js';
@@ -48,7 +56,8 @@ const DEFAULT_CONFIG = {
   windStage: 'normal',             // off|mild|normal|strong|gale|random (Phase 2.3)
   wallMode: 'off',                 // off|wrap|sticky|elastic|random (Phase 2.2)
   crumblePercent: 75,              // 0..100 (Phase 2.1)
-  startCredits: 0                  // Anfangsgeld
+  startCredits: 0,                 // Anfangsgeld
+  weaponPack: 'classic-plus'
 };
 
 // Phase 2.3: Wind-Stufen-Mapping. Maximaler Absolutwert je Stufe.
@@ -88,6 +97,7 @@ export class Game {
       hudAngle: document.getElementById('hud-angle'),
       hudPower: document.getElementById('hud-power'),
       hudWeapon: document.getElementById('hud-weapon'),
+      hudWeaponGrid: document.getElementById('hud-weapon-grid'),
       hudPlayers: document.getElementById('hud-players'),
       hudStatus: document.getElementById('hud-status'),
       // Mobile-HUD-Mirror
@@ -129,6 +139,10 @@ export class Game {
       setWallMode: document.getElementById('set-wall-mode'),
       setCrumble: document.getElementById('set-crumble'),
       setStartCredits: document.getElementById('set-start-credits'),
+      setWeaponPack: document.getElementById('set-weapon-pack'),
+      setPackName: document.getElementById('set-pack-name'),
+      setPackWeapons: document.getElementById('set-pack-weapons'),
+      btnSavePack: document.getElementById('btn-save-pack'),
       setWorldSizeSettings: document.getElementById('set-world-size'),
       // Sound-Toggles
       btnSound: document.getElementById('btn-sound'),
@@ -156,7 +170,8 @@ export class Game {
       windStage: this.settings.windStage ?? DEFAULT_CONFIG.windStage,
       wallMode: this.settings.wallMode ?? DEFAULT_CONFIG.wallMode,
       crumblePercent: this.settings.crumblePercent ?? DEFAULT_CONFIG.crumblePercent,
-      startCredits: this.settings.startCredits ?? DEFAULT_CONFIG.startCredits
+      startCredits: this.settings.startCredits ?? DEFAULT_CONFIG.startCredits,
+      weaponPack: this.settings.weaponPack ?? DEFAULT_CONFIG.weaponPack
     };
 
     /** D-Pad-Aim-Input: -1/0/+1 je Achse (von touch.js gesetzt). */
@@ -254,9 +269,11 @@ export class Game {
     if (this.el.setCrumble) this.el.setCrumble.value = String(this.config.crumblePercent);
     if (this.el.setStartCredits) this.el.setStartCredits.value = String(this.config.startCredits);
     if (this.el.setWorldSizeSettings) this.el.setWorldSizeSettings.value = this.config.worldSize;
+    this._renderWeaponPackSettings();
 
     this.el.btnOpenSettings?.addEventListener('click', () => {
       this.sound.playClick();
+      this._renderWeaponPackSettings();
       this.el.settings?.classList.remove('hidden');
     });
     this.el.btnCloseSettings?.addEventListener('click', () => {
@@ -264,6 +281,11 @@ export class Game {
       this._saveSettingsForm();
       this.el.settings?.classList.add('hidden');
     });
+    this.el.setWeaponPack?.addEventListener('change', () => {
+      this.config.weaponPack = this.el.setWeaponPack.value;
+      this._renderWeaponPackEditor(this.config.weaponPack);
+    });
+    this.el.btnSavePack?.addEventListener('click', () => this._saveCustomWeaponPack());
 
     this._updateSoundButtons();
 
@@ -296,18 +318,70 @@ export class Game {
     const wall = this.el.setWallMode?.value ?? 'off';
     const crumble = parseInt(this.el.setCrumble?.value ?? '75', 10);
     const sc = parseInt(this.el.setStartCredits?.value ?? '0', 10);
+    const pack = this.el.setWeaponPack?.value ?? 'classic-plus';
     this.config.worldSize = CONFIG.world.presets[ws] ? ws : 'mittel';
     this.config.windStage = ['off','mild','normal','strong','gale','random'].includes(stage) ? stage : 'normal';
     this.config.wallMode = ['off','wrap','sticky','elastic','random'].includes(wall) ? wall : 'off';
     this.config.crumblePercent = clamp(crumble, 0, 100);
     this.config.startCredits = clamp(sc, 0, 5000);
+    this.config.weaponPack = allWeaponPacks(this.settings.customWeaponPacks)[pack] ? pack : 'classic-plus';
     this.settings = saveSettings({
       worldSize: this.config.worldSize,
       windStage: this.config.windStage,
       wallMode: this.config.wallMode,
       crumblePercent: this.config.crumblePercent,
-      startCredits: this.config.startCredits
+      startCredits: this.config.startCredits,
+      weaponPack: this.config.weaponPack
     });
+    this._ensureSelectedWeaponsInPack();
+  }
+
+  _renderWeaponPackSettings() {
+    const packs = allWeaponPacks(this.settings.customWeaponPacks);
+    if (this.el.setWeaponPack) {
+      this.el.setWeaponPack.innerHTML = Object.values(packs)
+        .map((pack) => `<option value="${escapeHtml(pack.id)}">${escapeHtml(pack.name)}</option>`)
+        .join('');
+      if (!packs[this.config.weaponPack]) this.config.weaponPack = 'classic-plus';
+      this.el.setWeaponPack.value = this.config.weaponPack;
+    }
+    this._renderWeaponPackEditor(this.config.weaponPack);
+  }
+
+  _renderWeaponPackEditor(packId) {
+    const packs = allWeaponPacks(this.settings.customWeaponPacks);
+    const pack = packs[packId] ?? packs['classic-plus'];
+    const selected = new Set(pack.weapons);
+    if (this.el.setPackName) {
+      this.el.setPackName.value = packId.startsWith('custom-') ? pack.name : `${pack.name} Kopie`;
+    }
+    if (!this.el.setPackWeapons) return;
+    this.el.setPackWeapons.innerHTML = WEAPON_ORDER.map((id) => {
+      const w = WEAPONS[id];
+      const locked = id === 'standard';
+      return `
+        <label class="weapon-pack-check" style="border-color:${selected.has(id) ? w.color : 'rgba(255,255,255,0.12)'}">
+          <input type="checkbox" value="${id}" ${selected.has(id) ? 'checked' : ''} ${locked ? 'disabled' : ''} />
+          <span class="weapon-pack-icon" style="color:${w.color}">${w.icon}</span>
+          <span>${escapeHtml(w.name)}</span>
+        </label>`;
+    }).join('');
+  }
+
+  _saveCustomWeaponPack() {
+    const rawName = this.el.setPackName?.value?.trim() || 'Eigenes Pack';
+    const ids = Array.from(this.el.setPackWeapons?.querySelectorAll('input[type="checkbox"]:checked') ?? [])
+      .map((input) => input.value);
+    const weapons = normalizeWeaponIds(ids);
+    const safeBase = rawName.toLowerCase().replace(/[^a-z0-9äöüß]+/gi, '-').replace(/^-+|-+$/g, '') || 'pack';
+    const id = `custom-${safeBase}`.slice(0, 48);
+    const others = (this.settings.customWeaponPacks ?? []).filter((p) => p.id !== id);
+    const customWeaponPacks = [...others, { id, name: rawName, weapons }];
+    this.config.weaponPack = id;
+    this.settings = saveSettings({ customWeaponPacks, weaponPack: id });
+    this._renderWeaponPackSettings();
+    this._ensureSelectedWeaponsInPack();
+    this.sound.playClick();
   }
 
   // -- Player-Setup-Screen (Phase 3.3) ---------------------------------------
@@ -599,7 +673,7 @@ export class Game {
         // im Shop angezeigt; Mensch sieht was die KI eingelagert hat.
         for (const t of this.tanks) {
           if (!t.isHuman && t.alive !== undefined) {
-            t.lastShopPurchases = aiBuyWeapons(t, this.config.aiDifficulty);
+            t.lastShopPurchases = aiBuyWeapons(t, this.config.aiDifficulty, this._packWeaponIds());
           }
         }
         // Erster MENSCHLICHER Tab als initial aktiv (KI-Tabs sind read-only).
@@ -766,7 +840,7 @@ export class Game {
   }
 
   _cycleWeapon(tank, dir) {
-    const available = WEAPON_ORDER.filter((id) => canFire(tank, id));
+    const available = this._availableWeaponIds(tank);
     if (available.length === 0) return;
     let i = available.indexOf(tank.selectedWeapon);
     if (i < 0) i = 0;
@@ -774,12 +848,29 @@ export class Game {
     tank.selectedWeapon = available[i];
   }
 
+  _packWeaponIds() {
+    return packWeaponIds(this.config.weaponPack, this.settings.customWeaponPacks);
+  }
+
+  _availableWeaponIds(tank) {
+    return this._packWeaponIds().filter((id) => canFire(tank, id));
+  }
+
+  _ensureSelectedWeaponsInPack() {
+    for (const t of this.tanks) {
+      if (!t) continue;
+      const available = this._availableWeaponIds(t);
+      if (!available.includes(t.selectedWeapon)) t.selectedWeapon = available[0] ?? 'standard';
+    }
+  }
+
   // -- Schiessen --------------------------------------------------------------
 
   _fire() {
     const t = this.tanks[this.activeIndex];
     if (!t || !t.alive) return;
-    const wid = canFire(t, t.selectedWeapon) ? t.selectedWeapon : 'standard';
+    const allowed = this._packWeaponIds();
+    const wid = allowed.includes(t.selectedWeapon) && canFire(t, t.selectedWeapon) ? t.selectedWeapon : 'standard';
     const w = WEAPONS[wid];
     consumeWeapon(t, wid);
 
@@ -839,14 +930,15 @@ export class Game {
 
     const prevX = p.x;
     const prevY = p.y;
-    p.update(dt, this.wind, bounds);
+    const w = WEAPONS[p.weaponId] || WEAPONS.standard;
+    if (w.homing) this._applyHoming(p, w.homing, dt);
+    p.update(dt, this.wind * (w.windFactor ?? 1), bounds);
 
     // Phase 2.2: Wall-Mode anwenden (off/wrap/sticky/elastic).
     this._applyWallMode(p, bounds);
 
     // Apex-Split (Streubombe/MIRV) — nur bei Hauptgeschoss, nicht bei Kindern.
     if (!isChild) {
-      const w = WEAPONS[p.weaponId];
       if (w?.splitOnApex && !p.didSplit && p.vy >= 0 && p.age > 0.15) {
         p.didSplit = true;
         this._splitAtApex(p, w);
@@ -872,6 +964,30 @@ export class Game {
       const impact = checkProjectileImpact(p, prevX, prevY, this.terrain, this.tanks);
       if (impact) this._handleImpact(p, impact);
     }
+  }
+
+  _applyHoming(p, cfg, dt) {
+    if (p.isChild || p.age > (cfg.maxAge ?? 4)) return;
+    const candidates = this.tanks
+      .filter((t) => t.alive && t.id !== p.ownerId)
+      .map((t) => ({ tank: t, d: Math.hypot(t.x - p.x, (t.y - 12) - p.y) }))
+      .filter((it) => it.d <= (cfg.acquireRange ?? 700))
+      .sort((a, b) => a.d - b.d);
+    const target = candidates[0]?.tank;
+    if (!target) return;
+    const speed = Math.hypot(p.vx, p.vy);
+    if (speed < 80) return;
+    const tx = target.x;
+    const ty = target.y - 12;
+    const desired = Math.atan2(ty - p.y, tx - p.x);
+    const current = Math.atan2(p.vy, p.vx);
+    let delta = desired - current;
+    while (delta > Math.PI) delta -= Math.PI * 2;
+    while (delta < -Math.PI) delta += Math.PI * 2;
+    const maxTurn = (cfg.turnRate ?? 1.5) * dt;
+    const next = current + clamp(delta, -maxTurn, maxTurn);
+    p.vx = Math.cos(next) * speed;
+    p.vy = Math.sin(next) * speed;
   }
 
   _splitAtApex(p, w) {
@@ -1391,7 +1507,7 @@ export class Game {
       t.lastShotTrail = null;
       t.currentShotTrail = null;
       // Falls die ausgewaehlte Waffe nicht mehr verfuegbar -> auf Standard zurueck.
-      if (!canFire(t, t.selectedWeapon)) t.selectedWeapon = 'standard';
+      if (!this._packWeaponIds().includes(t.selectedWeapon) || !canFire(t, t.selectedWeapon)) t.selectedWeapon = 'standard';
       t.snapToTerrain(this.terrain);
     });
 
@@ -1406,7 +1522,8 @@ export class Game {
     this.projectile = null;
     this.subProjectiles = [];
     this.effects = [];
-    this._renderPlayersHud();
+    this._renderWeaponBar();
+    this._syncWorldTopInset();
   }
 
   _nextActiveTank() {
@@ -1496,6 +1613,39 @@ export class Game {
     return '#ef4444';
   }
 
+  _renderWeaponBar() {
+    const active = this.tanks[this.activeIndex];
+    const grid = this.el.hudWeaponGrid;
+    if (!active || !grid) return;
+    const available = this._availableWeaponIds(active);
+    if (!available.includes(active.selectedWeapon)) active.selectedWeapon = available[0] ?? 'standard';
+    const key = `${active.id}|${active.selectedWeapon}|${available.map((id) => `${id}:${active.inventory.get(id) ?? 0}`).join(',')}`;
+    if (grid.dataset.key === key) return;
+    grid.dataset.key = key;
+    grid.innerHTML = available.map((id) => {
+      const w = WEAPONS[id];
+      const stock = w.unlimited ? '∞' : (active.inventory.get(id) ?? 0);
+      const selected = id === active.selectedWeapon;
+      return `
+        <button class="weapon-slot ${selected ? 'selected' : ''}" data-weapon="${id}"
+          title="${escapeHtml(w.name)} ×${stock}" aria-label="${escapeHtml(w.name)} ×${stock}"
+          style="--weapon-color:${w.color}">
+          <span class="weapon-icon">${w.icon}</span>
+          <span class="weapon-stock">×${stock}</span>
+        </button>`;
+    }).join('');
+    grid.querySelectorAll('button[data-weapon]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-weapon');
+        if (!id || !canFire(active, id)) return;
+        active.selectedWeapon = id;
+        grid.dataset.key = '';
+        this._renderWeaponBar();
+      });
+    });
+    this._syncWorldTopInset();
+  }
+
   _showBanner(title, sub = '', color = '#fbbf24') {
     if (!this.el.banner) return;
     this.el.banner.classList.remove('hidden');
@@ -1539,6 +1689,7 @@ export class Game {
     }
     // Touch-Controls nur sichtbar, wenn HUD aktiv ist (= waehrend Spiel).
     document.body.classList.toggle('in-game', name === 'hud');
+    this._syncWorldTopInset(name === 'hud');
     // Touch-Hint nur EINMAL pro Match-Session zeigen — nicht bei jedem Turn-Wechsel.
     const hint = document.getElementById('touch-hint');
     if (hint) {
@@ -1551,6 +1702,12 @@ export class Game {
         hint.classList.add('fade-out');
       }
     }
+  }
+
+  _syncWorldTopInset(forceHud = this.state !== S.MENU && this.state !== S.PLAYER_SETUP) {
+    const topbar = document.getElementById('hud-topbar');
+    const inset = forceHud && topbar ? topbar.offsetHeight : 0;
+    this.renderer.setTopInset(inset);
   }
 
   // -- Shop -------------------------------------------------------------------
@@ -1600,7 +1757,7 @@ export class Game {
       this.el.shopHeader.style.color = tank.color;
     }
 
-    this.el.shopGrid.innerHTML = WEAPON_ORDER.map((id) => {
+    this.el.shopGrid.innerHTML = this._packWeaponIds().map((id) => {
       const w = WEAPONS[id];
       const owned = w.unlimited ? '∞' : (tank.inventory.get(id) ?? 0);
       const affordable = w.unlimited || tank.credits >= w.price;
@@ -1684,7 +1841,6 @@ export class Game {
         const w = WEAPONS[active.selectedWeapon] || WEAPONS.standard;
         const stock = w.unlimited ? '∞' : active.inventory.get(w.id) ?? 0;
         const wTextLong = `${w.icon} ${w.name} ×${stock}`;
-        const wTextShort = `${w.icon} ${shortName(w.name)} ×${stock}`;
 
         if (this.el.hudActive) {
           this.el.hudActive.textContent = active.name + (flying ? ' (im Flug)' : '');
@@ -1696,18 +1852,7 @@ export class Game {
           this.el.hudWeapon.textContent = wTextLong;
           this.el.hudWeapon.style.color = w.color || '#fff';
         }
-
-        // Mobile-Mirror.
-        if (this.el.hudActiveMobile) {
-          this.el.hudActiveMobile.textContent = active.name + (flying ? ' ✈' : '');
-          this.el.hudActiveMobile.style.color = active.color;
-        }
-        if (this.el.hudAngleMobile) this.el.hudAngleMobile.textContent = angleStr;
-        if (this.el.hudPowerMobile) this.el.hudPowerMobile.textContent = powerStr;
-        if (this.el.hudWeaponMobile) {
-          this.el.hudWeaponMobile.textContent = wTextShort;
-          this.el.hudWeaponMobile.style.color = w.color || '#fff';
-        }
+        this._renderWeaponBar();
         // D-Pad-Anzeige (Legacy — falls noch im DOM, wird aktualisiert).
         if (this.el.dpadAngle) this.el.dpadAngle.textContent = angleStr;
         if (this.el.dpadPower) this.el.dpadPower.textContent = powerStr;
